@@ -123,7 +123,7 @@ def sample_chase_df():
 def sample_alliant_df():
     return pd.DataFrame({
         'Date': ['01/01/2025', '01/01/2025'],
-        'Description': ['LOY*MEMHERMANNGOHEALTHUC 281-947-0020 GA', 'PAYPAL *EPIC GAMES 402-935-7733 NC'],
+        'Description': ['TEST_MERCHANT_1 123-456-7890 ST', 'TEST_MERCHANT_2 987-654-3210 ST'],
         'Amount': ['$42.80 ', '$7.57 '],
         'Balance': ['$0.00 ', '$0.00 '],
         'Post Date': ['01/02/2025', '01/02/2025']
@@ -131,6 +131,12 @@ def sample_alliant_df():
 
 # Test setup_logging
 def test_setup_logging(tmp_path, monkeypatch):
+    """Test logging setup
+    INTERNAL CHECK: Verifies development infrastructure for logging
+    - Log directory creation
+    - Log file naming
+    - Log rotation
+    """
     log_dir = tmp_path / "logs"
     monkeypatch.setattr('reconcile.__file__', str(tmp_path / "reconcile.py"))
     setup_logging(logging.DEBUG)
@@ -139,6 +145,12 @@ def test_setup_logging(tmp_path, monkeypatch):
 
 # Test ensure_directory
 def test_ensure_directory(tmp_path, monkeypatch):
+    """Test directory creation
+    INTERNAL CHECK: Verifies development infrastructure for directory management
+    - Directory creation
+    - Directory permissions
+    - Error handling
+    """
     monkeypatch.setattr('reconcile.__file__', str(tmp_path / "reconcile.py"))
     archive_dir = ensure_directory("archive")
     assert os.path.exists(archive_dir)
@@ -150,6 +162,11 @@ def test_ensure_directory(tmp_path, monkeypatch):
 
 # Test standardize_date function
 def test_standardize_date(sample_date_strings):
+    """Test date standardization to YYYY-MM-DD format
+    BUSINESS REQUIREMENT: Verifies the spec's requirement for standardized date format
+    - All dates must be in YYYY-MM-DD format
+    - Various input formats must be properly converted
+    """
     assert standardize_date(sample_date_strings['standard']) == '2024-03-15'
     assert standardize_date(sample_date_strings['us_format']) == '2024-03-15'
     assert standardize_date(sample_date_strings['with_time']) == '2024-03-15'
@@ -157,6 +174,11 @@ def test_standardize_date(sample_date_strings):
 
 # Test clean_amount function
 def test_clean_amount(sample_amounts):
+    """Test amount standardization to decimal format
+    BUSINESS REQUIREMENT: Verifies the spec's requirement for standardized amount format
+    - All amounts must be decimal with 2 decimal places
+    - Various input formats must be properly converted
+    """
     assert clean_amount(sample_amounts['simple']) == 123.45
     assert clean_amount(sample_amounts['with_currency']) == 123.45
     assert clean_amount(sample_amounts['with_commas']) == 1234.56
@@ -165,6 +187,13 @@ def test_clean_amount(sample_amounts):
 
 # Test process_discover_format
 def test_process_discover_format(sample_discover_df):
+    """Test processing Discover format
+    BUSINESS REQUIREMENT: Verifies the spec's requirement for Discover format processing
+    - Correct column mapping
+    - Proper date standardization
+    - Amount sign handling
+    - Source file tracking
+    """
     result = process_discover_format(sample_discover_df)
     assert set(result.columns) == {'Transaction Date', 'Post Date', 'Description', 'Amount', 'source_file', 'Category'}
     assert result['Post Date'].iloc[0] == '2024-03-15'
@@ -174,6 +203,13 @@ def test_process_discover_format(sample_discover_df):
 
 # Test process_amex_format
 def test_process_amex_format(sample_amex_df):
+    """Test processing Amex format
+    BUSINESS REQUIREMENT: Verifies the spec's requirement for Amex format processing
+    - Correct column mapping
+    - Proper date standardization
+    - Amount sign handling
+    - Source file tracking
+    """
     result = process_amex_format(sample_amex_df)
     assert set(result.columns) == {'Transaction Date', 'Post Date', 'Description', 'Amount', 'source_file'}
     assert result['Transaction Date'].iloc[0] == '2024-03-15'
@@ -183,6 +219,13 @@ def test_process_amex_format(sample_amex_df):
 
 # Test process_capital_one_format
 def test_process_capital_one_format(sample_capital_one_df):
+    """Test processing Capital One format
+    BUSINESS REQUIREMENT: Verifies the spec's requirement for Capital One format processing
+    - Correct column mapping
+    - Proper date standardization
+    - Amount sign handling
+    - Source file tracking
+    """
     result = process_capital_one_format(sample_capital_one_df)
     assert set(result.columns) == {'Transaction Date', 'Post Date', 'Description', 'Amount', 'source_file', 'Category'}
     assert result['Post Date'].iloc[0] == '2024-03-15'
@@ -192,17 +235,30 @@ def test_process_capital_one_format(sample_capital_one_df):
 
 # Test process_alliant_format
 def test_process_alliant_format(sample_alliant_df):
+    """Test processing Alliant format
+    BUSINESS REQUIREMENT: Verifies the spec's requirement for Alliant format processing
+    - Correct column mapping
+    - Proper date standardization
+    - Amount sign handling
+    - Source file tracking
+    """
     result = process_alliant_format(sample_alliant_df)
     assert set(result.columns) == {'Transaction Date', 'Post Date', 'Description', 'Amount', 'source_file'}
     assert result['Post Date'].iloc[0] == '2025-01-02'  # Uses Post Date
     assert result['Transaction Date'].iloc[0] == '2025-01-01'  # Uses Date as Transaction Date
     assert result['Amount'].iloc[0] == -42.80  # Amount is inverted and cleaned
-    assert result['Description'].iloc[0] == 'LOY*MEMHERMANNGOHEALTHUC 281-947-0020 GA'
+    assert result['Description'].iloc[0] == 'TEST_MERCHANT_1 123-456-7890 ST'
     assert result['source_file'].iloc[0] == 'alliant'
 
 # Test process_chase_format
 def test_process_chase_format(sample_chase_df):
-    """Test processing Chase format"""
+    """Test processing Chase format
+    BUSINESS REQUIREMENT: Verifies the spec's requirement for Chase format processing
+    - Correct column mapping
+    - Proper date standardization
+    - Amount sign handling
+    - Source file tracking
+    """
     # Create test data matching actual Chase format
     test_df = pd.DataFrame({
         'Details': ['DEBIT', 'CREDIT'],
@@ -224,7 +280,13 @@ def test_process_chase_format(sample_chase_df):
 
 # Test process_aggregator_format
 def test_process_aggregator_format(sample_aggregator_df):
-    """Test processing aggregator format"""
+    """Test processing aggregator format
+    BUSINESS REQUIREMENT: Verifies the spec's requirement for aggregator format processing
+    - Correct column mapping
+    - Proper date standardization
+    - Amount sign handling
+    - Source file tracking
+    """
     result = process_aggregator_format(sample_aggregator_df)
     assert set(result.columns) == {'Transaction Date', 'Post Date', 'Description', 'Amount', 'source_file', 'Category', 'Tags'}
     assert result['Post Date'].iloc[0] == '2024-03-15'
@@ -236,7 +298,12 @@ def test_process_aggregator_format(sample_aggregator_df):
 
 # Test reconcile_transactions
 def test_reconcile_transactions(sample_discover_df, sample_aggregator_df):
-    """Test reconciliation between detail and aggregator records"""
+    """Test reconciliation between detail and aggregator records
+    BUSINESS REQUIREMENT: Verifies core reconciliation functionality including:
+    - Correct handling of matched and unmatched records
+    - Proper reconciled_key format (P: or T: prefix)
+    - Required columns in output
+    """
     # Process detail records
     detail_records = process_discover_format(sample_discover_df)
     
@@ -250,7 +317,7 @@ def test_reconcile_transactions(sample_discover_df, sample_aggregator_df):
     matched_records = result[result['Matched']]
     assert len(matched_records) > 0
     for _, row in matched_records.iterrows():
-        assert row['reconciled_key'].startswith('M:')  # Should be marked as matched
+        assert row['reconciled_key'].startswith(('P:', 'T:')), "Should be marked as Post Date or Transaction Date matched"
     
     # Verify unmatched detail records
     unmatched_detail = result[result['reconciled_key'].startswith('D:')]
@@ -264,7 +331,12 @@ def test_reconcile_transactions(sample_discover_df, sample_aggregator_df):
 
 # Test import_csv with different formats
 def test_import_csv(tmp_path):
-    """Test importing CSV files with different formats"""
+    """Test importing CSV files with different formats
+    BUSINESS REQUIREMENT: Verifies the spec's requirement for CSV import functionality
+    - Support for all required formats (Discover, Chase, Amex, Capital One, Alliant)
+    - Proper format detection
+    - Correct processing of each format
+    """
     # Test Discover format
     discover_df = pd.DataFrame({
         'Trans. Date': ['2024-03-15'],
@@ -342,7 +414,12 @@ def test_import_csv(tmp_path):
 
 # Test import_folder
 def test_import_folder(tmp_path):
-    """Test importing multiple CSV files with different institution formats"""
+    """Test importing multiple CSV files with different institution formats
+    BUSINESS REQUIREMENT: Verifies the spec's requirement for folder import functionality
+    - Support for multiple files
+    - Proper format detection per file
+    - Correct combination of records
+    """
     # Create test folder with multiple institution formats
     discover_df = pd.DataFrame({
         'Trans. Date': ['2024-03-15'],
@@ -369,7 +446,14 @@ def test_import_folder(tmp_path):
     assert all(source in result['source_file'].unique() for source in ['discover_card.csv', 'amex_card.csv'])
 
 def test_dataframe_structure_consistency(sample_discover_df, sample_amex_df, sample_capital_one_df, sample_alliant_df, sample_aggregator_df, tmp_path):
-    """Regression test to ensure consistent DataFrame structures across all processing functions"""
+    """Regression test to ensure consistent DataFrame structures across all processing functions
+    BUSINESS REQUIREMENT: Verifies the spec's requirements for data structure consistency
+    - Required columns for detail records (Transaction Date, Post Date, Description, Amount, source_file)
+    - Required columns for aggregator records (Date, Description, Amount, Category, Tags, Account)
+    - Required columns for reconciled output (Date, YearMonth, Account, Description, Category, Tags, Amount, reconciled_key, Matched)
+    - Data type consistency for critical columns
+    - No missing values in critical columns
+    """
     
     # Define expected column structures
     DETAIL_COLUMNS = ['Transaction Date', 'Post Date', 'Description', 'Amount', 'source_file']
@@ -475,7 +559,13 @@ def test_dataframe_structure_consistency(sample_discover_df, sample_amex_df, sam
     assert all(isinstance(x, (int, float)) for x in reconciled['Amount']), "Found non-numeric values in Amount column"
 
 def test_source_file_tracking(tmp_path):
-    """Test that source files are properly tracked through the reconciliation process"""
+    """Test that source files are properly tracked through the reconciliation process
+    BUSINESS REQUIREMENT: Verifies the spec's requirements for source file tracking
+    - Source file identification in imported data
+    - Source tracking in unmatched records (Unreconciled - [source_file] format)
+    - Source preservation in matched records
+    - Proper handling of source files across the entire reconciliation process
+    """
     # Create test files with different institution formats
     discover_df = pd.DataFrame({
         'Trans. Date': ['2024-03-15'],
@@ -574,7 +664,12 @@ def test_source_file_tracking(tmp_path):
     assert all(isinstance(date, str) and re.match(r'^\d{4}-\d{2}-\d{2}$', date) for date in reconciled['Date'] if pd.notna(date)), "Found dates in incorrect format"
 
 def test_date_handling_edge_cases():
-    """Test date handling for various edge cases"""
+    """Test date handling for various edge cases
+    INTERNAL CHECK: Verifies robustness of date handling implementation
+    - Various date format inputs
+    - Invalid date handling
+    - Null/empty date handling
+    """
     # Test with various date formats
     test_dates = pd.DataFrame({
         'Trans. Date': [
@@ -658,7 +753,12 @@ def test_date_handling_edge_cases():
     assert reconciled['YearMonth'].dtype == 'object', "YearMonth should be string type"
 
 def test_reconcile_transactions_date_matching(sample_alliant_df, sample_aggregator_df):
-    """Test that reconciliation properly handles Post Date and Transaction Date matching"""
+    """Test that reconciliation properly handles Post Date and Transaction Date matching
+    BUSINESS REQUIREMENT: Verifies the spec's requirement for matching on both Post Date and Transaction Date
+    - Post Date matches use P: prefix
+    - Transaction Date matches use T: prefix
+    - Both types of matches are valid
+    """
     # Create test data where aggregator date matches Post Date for one record
     # and Transaction Date for another
     detail_records = process_alliant_format(sample_alliant_df)
@@ -685,10 +785,10 @@ def test_reconcile_transactions_date_matching(sample_alliant_df, sample_aggregat
     assert not trans_date_match.empty, "Should have a Transaction Date match"
     
     # Verify reconciled_key format for Post Date match
-    assert post_date_match['reconciled_key'].iloc[0] == f"P:2025-01-02|{-42.80}", "Post Date match should have P: prefix"
+    assert post_date_match['reconciled_key'].iloc[0] == f"P:2025-01-02_-42.80", "Post Date match should have P: prefix and underscore separator"
     
     # Verify reconciled_key format for Transaction Date match
-    assert trans_date_match['reconciled_key'].iloc[0] == f"T:2025-01-01|{-7.57}", "Transaction Date match should have T: prefix"
+    assert trans_date_match['reconciled_key'].iloc[0] == f"T:2025-01-01_-7.57", "Transaction Date match should have T: prefix and underscore separator"
     
     # Verify the original dates are preserved in the detail records
     assert detail_records['Post Date'].iloc[0] == '2025-01-02'
@@ -704,4 +804,150 @@ def test_reconcile_transactions_date_matching(sample_alliant_df, sample_aggregat
     post_date_match_result = result[result['Date'] == '2025-01-02']
     trans_date_match_result = result[result['Date'] == '2025-01-01']
     assert not post_date_match_result.empty, "Should have a record with matching Post Date in result"
-    assert not trans_date_match_result.empty, "Should have a record with matching Transaction Date in result" 
+    assert not trans_date_match_result.empty, "Should have a record with matching Transaction Date in result"
+
+def test_reconcile_transactions_basic_matching():
+    """Test basic reconciliation between detail and aggregator records
+    BUSINESS REQUIREMENT: Verifies the fundamental matching logic specified in the spec
+    - Correct handling of date and amount matches
+    - Proper reconciled_key format with P: or T: prefix
+    - Underscore separator in reconciled_key
+    """
+    # Create test data with clear matches
+    detail_df = pd.DataFrame({
+        'Post Date': ['2024-03-15', '2024-03-16'],
+        'Transaction Date': ['2024-03-15', '2024-03-16'],
+        'Description': ['Test 1', 'Test 2'],
+        'Amount': [-100.00, -200.00]
+    })
+    
+    aggregator_df = pd.DataFrame({
+        'Date': ['2024-03-15', '2024-03-16'],
+        'Description': ['Agg 1', 'Agg 2'],
+        'Amount': [-100.00, -200.00],
+        'Category': ['Cat1', 'Cat2'],
+        'Tags': ['', ''],
+        'Account': ['Acc1', 'Acc1']
+    })
+    
+    result = reconcile_transactions(aggregator_df, [detail_df])
+    
+    # Verify basic structure
+    assert set(result.columns) == {'Date', 'YearMonth', 'Account', 'Description', 'Category', 'Tags', 'Amount', 'reconciled_key', 'Matched'}
+    
+    # Verify matches
+    matches = result[result['reconciled_key'].str.startswith(('P:', 'T:'))]
+    assert len(matches) == 2, "Should have two matches"
+    assert all(matches['Matched']), "All matches should be marked as matched"
+    
+    # Verify reconciled_key format
+    for _, row in matches.iterrows():
+        assert re.match(r'[PT]:\d{4}-\d{2}-\d{2}_-?\d+\.\d{2}', row['reconciled_key']), "Key should match format [PT]:YYYY-MM-DD_AMOUNT"
+
+def test_reconcile_transactions_date_priority():
+    """Test that reconciliation follows date matching priority (Post Date first, then Transaction Date)
+    BUSINESS REQUIREMENT: Verifies the spec's requirement for Post Date priority over Transaction Date
+    - Post Date matches take precedence
+    - Transaction Date matches are used as fallback
+    """
+    # Create test data where Post Date and Transaction Date differ
+    detail_df = pd.DataFrame({
+        'Post Date': ['2024-03-15', '2024-03-16'],
+        'Transaction Date': ['2024-03-14', '2024-03-15'],
+        'Description': ['Test 1', 'Test 2'],
+        'Amount': [-100.00, -200.00]
+    })
+    
+    aggregator_df = pd.DataFrame({
+        'Date': ['2024-03-15', '2024-03-15'],  # Both match Post Date of first record
+        'Description': ['Agg 1', 'Agg 2'],
+        'Amount': [-100.00, -200.00],
+        'Category': ['Cat1', 'Cat2'],
+        'Tags': ['', ''],
+        'Account': ['Acc1', 'Acc1']
+    })
+    
+    result = reconcile_transactions(aggregator_df, [detail_df])
+    
+    # Verify Post Date match takes priority
+    post_date_match = result[result['Date'] == '2024-03-15']
+    assert post_date_match['reconciled_key'].iloc[0].startswith('P:'), "Post Date match should have P: prefix"
+    
+    # Verify Transaction Date match is used as fallback
+    trans_date_match = result[result['Date'] == '2024-03-15']
+    assert trans_date_match['reconciled_key'].iloc[1].startswith('T:'), "Transaction Date match should have T: prefix"
+
+def test_reconcile_transactions_chase_format():
+    """Test reconciliation with Chase format records
+    BUSINESS REQUIREMENT: Verifies handling of Chase-specific format as specified in the spec
+    - Proper processing of Chase date formats
+    - Correct handling of Chase amount formats
+    - Proper matching with aggregator records
+    """
+    # Create Chase record with anonymized data
+    chase_df = pd.DataFrame({
+        'Details': ['DEBIT'],
+        'Posting Date': ['03/12/2025'],
+        'Description': ['TEST_MERCHANT_3           ACH_DEBIT  TEST_REFERENCE     WEB ID: TEST123'],
+        'Amount': [-95.89],
+        'Type': ['ACH_DEBIT'],
+        'Balance': [3990.63],
+        'Check or Slip #': ['']
+    })
+    
+    # Create matching aggregator record
+    aggregator_df = pd.DataFrame({
+        'Date': ['2025-03-12'],
+        'Description': ['Test Subscription Service'],
+        'Amount': [-95.89],
+        'Category': ['Subscription'],
+        'Tags': ['Test'],
+        'Account': ['Test Account']
+    })
+    
+    # Process Chase record
+    processed_chase = process_chase_format(chase_df)
+    
+    # Perform reconciliation
+    result = reconcile_transactions(aggregator_df, [processed_chase])
+    
+    # Verify the transaction was matched
+    assert len(result) == 1, "Should have exactly one record"
+    assert result['Matched'].iloc[0], "Transaction should be marked as matched"
+    assert result['reconciled_key'].iloc[0].startswith(('P:', 'T:')), "Should have P: or T: prefix"
+    assert result['Amount'].iloc[0] == -95.89, "Amount should match"
+    assert result['Date'].iloc[0] == '2025-03-12', "Date should match"
+
+def test_reconcile_transactions_duplicates():
+    """Test handling of duplicate transactions
+    BUSINESS REQUIREMENT: Verifies the spec's requirements for handling duplicate records
+    - Only one match should be made when multiple detail records match the same aggregator record
+    - Unmatched duplicates should be marked with D: prefix
+    - Proper handling of duplicate records in reconciliation process
+    """
+    # Create test data with duplicates
+    detail_df = pd.DataFrame({
+        'Post Date': ['2024-03-15', '2024-03-15'],
+        'Transaction Date': ['2024-03-15', '2024-03-15'],
+        'Description': ['Test 1', 'Test 1'],
+        'Amount': [-100.00, -100.00]
+    })
+    
+    aggregator_df = pd.DataFrame({
+        'Date': ['2024-03-15'],
+        'Description': ['Agg 1'],
+        'Amount': [-100.00],
+        'Category': ['Cat1'],
+        'Tags': [''],
+        'Account': ['Acc1']
+    })
+    
+    result = reconcile_transactions(aggregator_df, [detail_df])
+    
+    # Verify only one match
+    matches = result[result['reconciled_key'].str.startswith(('P:', 'T:'))]
+    assert len(matches) == 1, "Should only match one duplicate"
+    
+    # Verify other duplicate is unmatched
+    unmatched = result[result['reconciled_key'].startswith('D:')]
+    assert len(unmatched) == 1, "Should have one unmatched duplicate" 
