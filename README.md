@@ -84,23 +84,26 @@ Each input file is read into a pandas DataFrame with institution-specific column
 #### Detail Records (Example - Discover)
 ```python
 {
-    'Trans. Date': ['2024-03-15', '2024-03-16'],
-    'Post Date': ['2024-03-15', '2024-03-16'],
-    'Description': ['Test1', 'Test2'],
-    'Amount': ['123.45', '-456.78'],
-    'Category': ['', 'Food']
+    'transaction_date': ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17'],
+    'post_date': ['2024-03-16', '2024-03-16', '2024-03-17', '2024-03-18'],
+    'description': ['Grocery Store', 'Grocery Store', 'Restaurant', 'Gas Station'],
+    'amount': [-123.45, -123.45, -67.89, -45.00],
+    'category': ['Food', 'Food', 'Food', 'Transportation'],
+    'source_file': ['discover_card.csv', 'discover_card.csv', 'discover_card.csv', 'discover_card.csv']
 }
 ```
 
 #### Aggregator Record
 ```python
 {
-    'Date': ['2024-03-15', '2024-03-16'],
-    'Description': ['Test1', 'Test2'],
-    'Amount': ['-123.45', '456.78'],
-    'Category': ['Food', 'Entertainment'],
-    'Tags': ['', ''],
-    'Account': ['Discover', 'Discover']
+    'transaction_date': ['2024-03-16', '2024-03-16', '2024-03-19'],
+    'post_date': ['2024-03-16', '2024-03-16', '2024-03-19'],
+    'description': ['Grocery Store', 'Restaurant', 'Online Purchase'],
+    'amount': [-123.45, -67.89, -99.99],
+    'category': ['Groceries', 'Dining', 'Shopping'],
+    'tags': ['', '', ''],
+    'account': ['Discover', 'Discover', 'Discover'],
+    'source_file': ['aggregator', 'aggregator', 'aggregator']
 }
 ```
 
@@ -110,12 +113,12 @@ Each input file is read into a pandas DataFrame with institution-specific column
 After processing each institution's format, all detail records are standardized to:
 ```python
 {
-    'Transaction Date': ['2024-03-15', '2024-03-16'],
-    'Post Date': ['2024-03-15', '2024-03-16'],
-    'Description': ['Test1', 'Test2'],
-    'Amount': [-123.45, -456.78],
-    'Category': ['', 'Food'],
-    'source_file': ['discover_card.csv', 'discover_card.csv']
+    'Transaction Date': ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17'],
+    'Post Date': ['2024-03-16', '2024-03-16', '2024-03-17', '2024-03-18'],
+    'Description': ['Grocery Store', 'Grocery Store', 'Restaurant', 'Gas Station'],
+    'Amount': [-123.45, -123.45, -67.89, -45.00],
+    'Category': ['Food', 'Food', 'Food', 'Transportation'],
+    'source_file': ['discover_card.csv', 'discover_card.csv', 'discover_card.csv', 'discover_card.csv']
 }
 ```
 
@@ -123,14 +126,14 @@ After processing each institution's format, all detail records are standardized 
 Aggregator records are standardized to:
 ```python
 {
-    'Transaction Date': ['2024-03-15', '2024-03-16'],
-    'Post Date': ['2024-03-15', '2024-03-16'],
-    'Description': ['Test1', 'Test2'],
-    'Amount': [-123.45, 456.78],
-    'Category': ['Food', 'Entertainment'],
-    'Tags': ['', ''],
-    'Account': ['Discover', 'Discover'],
-    'source_file': ['aggregator', 'aggregator']
+    'Transaction Date': ['2024-03-15', '2024-03-16', '2024-03-19'],
+    'Post Date': ['2024-03-15', '2024-03-16', '2024-03-19'],
+    'Description': ['Grocery Store', 'Restaurant', 'Online Purchase'],
+    'Amount': [-123.45, -67.89, -99.99],
+    'Category': ['Groceries', 'Dining', 'Shopping'],
+    'Tags': ['', '', ''],
+    'Account': ['Discover', 'Discover', 'Discover'],
+    'source_file': ['aggregator', 'aggregator', 'aggregator']
 }
 ```
 
@@ -182,81 +185,93 @@ Aggregator records are standardized to:
 **Detail Records (Discover)**
 ```python
 {
-    'Transaction Date': ['2024-03-15', '2024-03-16', '2024-03-17'],
-    'Post Date': ['2024-03-16', '2024-03-17', '2024-03-18'],
-    'Description': ['Grocery Store', 'Restaurant', 'Gas Station'],
-    'Amount': [-123.45, -67.89, -45.00],
-    'Category': ['Food', 'Food', 'Transportation'],
-    'source_file': ['discover_card.csv', 'discover_card.csv', 'discover_card.csv']
+    'transaction_date': ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17'],
+    'post_date': ['2024-03-16', '2024-03-16', '2024-03-17', '2024-03-18'],
+    'description': ['Grocery Store', 'Grocery Store', 'Restaurant', 'Gas Station'],
+    'amount': [-123.45, -123.45, -67.89, -45.00],
+    'category': ['Food', 'Food', 'Food', 'Transportation'],
+    'source_file': ['discover_card.csv', 'discover_card.csv', 'discover_card.csv', 'discover_card.csv']
 }
 ```
 
 **Aggregator Records**
 ```python
 {
-    'Transaction Date': ['2024-03-15', '2024-03-16', '2024-03-19'],
-    'Post Date': ['2024-03-16', '2024-03-17', '2024-03-19'],
-    'Description': ['Grocery Store', 'Restaurant', 'Online Purchase'],
-    'Amount': [-123.45, -67.89, -99.99],
-    'Category': ['Groceries', 'Dining', 'Shopping'],
-    'Tags': ['', '', ''],
-    'Account': ['Discover', 'Discover', 'Discover'],
+    'transaction_date': ['2024-03-16', '2024-03-16', '2024-03-19'],
+    'post_date': ['2024-03-16', '2024-03-16', '2024-03-19'],
+    'description': ['Grocery Store', 'Restaurant', 'Online Purchase'],
+    'amount': [-123.45, -67.89, -99.99],
+    'category': ['Groceries', 'Dining', 'Shopping'],
+    'tags': ['', '', ''],
+    'account': ['Discover', 'Discover', 'Discover'],
     'source_file': ['aggregator', 'aggregator', 'aggregator']
 }
 ```
 
 #### Matching Process with Position
 
-1. **First Transaction (Grocery Store)**
-   - Position: First in both files
-   - Post Date matches (2024-03-16)
-   - Transaction Date matches (2024-03-15)
-   - Amount matches (-123.45)
-   - Result: **Exact Match**
+1. **First Detail Transaction (Grocery Store, -123.45)**:
+   ✓ Detail Post Date (2024-03-16) matches Aggregator Transaction Date (2024-03-16)
+   ✓ Amount matches (-123.45)
+   ✓ Unmatched records available: Yes
+   = Result: M:2024-03-15_-123.45 (matched)
    - Category from aggregator ('Groceries') is used
+   - Note: Transaction Date not evaluated since Post Date matched
 
-2. **Second Transaction (Restaurant)**
-   - Position: Second in both files
-   - Post Date matches (2024-03-17)
-   - Transaction Date matches (2024-03-16)
-   - Amount matches (-67.89)
-   - Result: **Exact Match**
+2. **Second Detail Transaction (Grocery Store, -123.45)**:
+   ✓ Detail Post Date (2024-03-16) matches Aggregator Transaction Date (2024-03-16)
+   ✓ Amount matches (-123.45)
+   ✗ Unmatched records available: No (aggregator record already matched)
+   = Result: D:2024-03-15_-123.45 (unmatched detail)
+   - Category from detail record ('Food') is used
+   - Note: Transaction Date not evaluated since Post Date matched
+
+3. **Third Detail Transaction (Restaurant, -67.89)**:
+   ✗ Detail Post Date (2024-03-17) doesn't match Aggregator Transaction Date (2024-03-16)
+   ✓ Detail Transaction Date (2024-03-16) matches Aggregator Transaction Date (2024-03-16)
+   ✓ Amount matches (-67.89)
+   ✓ Unmatched records available: Yes
+   = Result: M:2024-03-16_-67.89 (matched)
    - Category from aggregator ('Dining') is used
 
-3. **Third Transaction (Gas Station)**
-   - Position: Third in detail file
-   - Post Date (2024-03-18) doesn't match any remaining aggregator records
-   - Transaction Date (2024-03-17) doesn't match any remaining aggregator records
-   - Result: **No Match**
+4. **Fourth Detail Transaction (Gas Station, -45.00)**:
+   ✗ Detail Post Date (2024-03-18) doesn't match Aggregator Transaction Date (2024-03-16)
+   ✗ Detail Transaction Date (2024-03-17) doesn't match Aggregator Transaction Date (2024-03-16)
+   ✓ Amount matches (-45.00)
+   ✗ Unmatched records available: No (no matching dates)
+   = Result: D:2024-03-17_-45.00 (unmatched detail)
    - Category from detail record ('Transportation') is used
 
-4. **Fourth Transaction (Online Purchase)**
-   - Position: Third in aggregator file
-   - Post Date (2024-03-19) doesn't match any remaining detail records
-   - Transaction Date (2024-03-19) doesn't match any remaining detail records
-   - Result: **No Match**
+5. **Fifth Transaction (Online Purchase, -99.99)**:
+   ✗ Detail Post Date (2024-03-19) doesn't match any remaining Detail Post Date
+   ✗ Detail Transaction Date (2024-03-19) doesn't match any remaining Detail Transaction Date
+   ✓ Amount matches (-99.99)
+   ✗ Unmatched records available: No (no matching dates)
+   = Result: U:2024-03-19_-99.99 (unmatched aggregator)
    - Category from aggregator ('Shopping') is used
+   - Note: This is an unreconciled aggregator record
 
 #### Final Output
 ```python
 {
-    'Date': ['2024-03-15', '2024-03-16', '2024-03-17', '2024-03-19'],
-    'YearMonth': ['2024-03', '2024-03', '2024-03', '2024-03'],
-    'Account': ['Discover', 'Discover', 'Discover', 'Discover'],
-    'Description': ['Grocery Store', 'Restaurant', 'Gas Station', 'Online Purchase'],
-    'Category': ['Groceries', 'Dining', 'Transportation', 'Shopping'],
-    'Tags': ['', '', '', ''],
-    'Amount': [-123.45, -67.89, -45.00, -99.99],
-    'reconciled_key': ['M:2024-03-15_-123.45', 'M:2024-03-16_-67.89', 'D:2024-03-17_-45.00', 'U:2024-03-19_-99.99'],
-    'Matched': [True, True, False, False]
+    'date': ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17', '2024-03-19'],
+    'year_month': ['2024-03', '2024-03', '2024-03', '2024-03', '2024-03'],
+    'account': ['Discover', 'Discover', 'Discover', 'Discover', 'Discover'],
+    'description': ['Grocery Store', 'Grocery Store', 'Restaurant', 'Gas Station', 'Online Purchase'],
+    'category': ['Groceries', 'Food', 'Dining', 'Transportation', 'Shopping'],
+    'tags': ['', '', '', '', ''],
+    'amount': [-123.45, -123.45, -67.89, -45.00, -99.99],
+    'reconciled_key': ['M:2024-03-15_-123.45', 'D:2024-03-15_-123.45', 'M:2024-03-16_-67.89', 'D:2024-03-17_-45.00', 'U:2024-03-19_-99.99'],
+    'matched': [True, False, True, False, False]
 }
 ```
 
 Key Points:
 - Categories from aggregator take precedence for matched transactions
-- Categories from detail records are used for unmatched detail transactions
-- Categories from aggregator are used for unmatched aggregator transactions
 - All transactions are preserved in the output, whether matched or not
+- Each transaction can only be matched once
+- We don't match duplicate detail transactions even if they match an aggregator record
+- We don't enforce chronological ordering in the matching process
 
 ## Input File Formats
 
