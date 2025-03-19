@@ -41,12 +41,13 @@ The reconciliation process follows these steps:
    - Example: `D:2024-03-15_-123.45`
 
 2. Match transactions based on:
-   - Primary: Post date matches
-   - Secondary: Transaction date matches
+   - Primary: Post date matches (marked with `P:` prefix)
+   - Secondary: Transaction date matches (marked with `T:` prefix)
    - Amount matches (including sign)
 
 3. Mark transactions as:
-   - `M:YYYY-MM-DD_AMOUNT` for matched transactions
+   - `P:YYYY-MM-DD_AMOUNT` for Post Date matched transactions
+   - `T:YYYY-MM-DD_AMOUNT` for Transaction Date matched transactions
    - `U:YYYY-MM-DD_AMOUNT` for unmatched aggregator records
    - `D:YYYY-MM-DD_AMOUNT` for unmatched detail records
 
@@ -59,7 +60,8 @@ The `reconciled_key` is a unique identifier for each transaction with the follow
 
 Where:
 - `PREFIX` is one of:
-  - `M`: Matched transaction
+  - `P`: Post Date matched transaction
+  - `T`: Transaction Date matched transaction
   - `U`: Unmatched aggregator record
   - `D`: Unmatched detail record
   - `A`: Aggregator record (before matching)
@@ -71,10 +73,11 @@ Where:
   - Decimal point for cents
 
 Examples:
-- `M:2024-03-15_-123.45` - Matched transaction
-- `D:2024-03-16_-456.78` - Unmatched detail record
-- `U:2024-03-17_789.01` - Unmatched aggregator record
-- `A:2024-03-18_-234.56` - Aggregator record before matching
+- `P:2024-03-15_-123.45` - Post Date matched transaction
+- `T:2024-03-16_-456.78` - Transaction Date matched transaction
+- `D:2024-03-17_-789.01` - Unmatched detail record
+- `U:2024-03-18_234.56` - Unmatched aggregator record
+- `A:2024-03-19_-345.67` - Aggregator record before matching
 
 ## Data Formats and Processing Stages
 
@@ -214,7 +217,7 @@ Aggregator records are standardized to:
    ✓ Detail Post Date (2024-03-16) matches Aggregator Transaction Date (2024-03-16)
    ✓ Amount matches (-123.45)
    ✓ Unmatched records available: Yes
-   = Result: M:2024-03-15_-123.45 (matched)
+   = Result: P:2024-03-15_-123.45 (matched)
    - Category from aggregator ('Groceries') is used
    - Note: Transaction Date not evaluated since Post Date matched
 
@@ -231,7 +234,7 @@ Aggregator records are standardized to:
    ✓ Detail Transaction Date (2024-03-16) matches Aggregator Transaction Date (2024-03-16)
    ✓ Amount matches (-67.89)
    ✓ Unmatched records available: Yes
-   = Result: M:2024-03-16_-67.89 (matched)
+   = Result: P:2024-03-16_-67.89 (matched)
    - Category from aggregator ('Dining') is used
 
 4. **Fourth Detail Transaction (Gas Station, -45.00)**:
@@ -261,7 +264,7 @@ Aggregator records are standardized to:
     'category': ['Groceries', 'Food', 'Dining', 'Transportation', 'Shopping'],
     'tags': ['', '', '', '', ''],
     'amount': [-123.45, -123.45, -67.89, -45.00, -99.99],
-    'reconciled_key': ['M:2024-03-15_-123.45', 'D:2024-03-15_-123.45', 'M:2024-03-16_-67.89', 'D:2024-03-17_-45.00', 'U:2024-03-19_-99.99'],
+    'reconciled_key': ['P:2024-03-15_-123.45', 'D:2024-03-15_-123.45', 'P:2024-03-16_-67.89', 'D:2024-03-17_-45.00', 'U:2024-03-19_-99.99'],
     'matched': [True, False, True, False, False]
 }
 ```
