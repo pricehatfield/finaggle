@@ -7,12 +7,12 @@ This tool reconciles transaction records from various financial institutions (de
 local_reconcile/
 ├── src/
 │   ├── reconcile.py
-│   ├── data/
 │   └── logs/
 ├── tests/
 │   ├── test_functions.py
 │   ├── test_file_formats.py
 │   └── test_reconcile.py
+├── data/              # Data files directory
 ├── setup.py
 ├── requirements.txt
 └── README.md
