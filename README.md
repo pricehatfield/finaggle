@@ -2,6 +2,46 @@
 
 This tool reconciles transaction records from various financial institutions (detail records) against a consolidated record (aggregator record).
 
+## Project Structure
+```
+local_reconcile/
+├── src/
+│   ├── reconcile.py
+│   ├── data/
+│   └── logs/
+├── tests/
+│   ├── test_functions.py
+│   ├── test_file_formats.py
+│   └── test_reconcile.py
+├── setup.py
+├── requirements.txt
+└── README.md
+```
+
+## Installation
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd local_reconcile
+```
+
+2. Create and activate a virtual environment (optional but recommended):
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. Install the package in development mode:
+```bash
+pip install -e .
+```
+
+4. Install development dependencies:
+```bash
+pip install -r requirements.txt
+```
+
 ## Overview
 
 The reconciliation process follows these steps:
@@ -90,25 +130,113 @@ Each input file is read into a pandas DataFrame with institution-specific column
     'transaction_date': ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17'],
     'post_date': ['2024-03-16', '2024-03-16', '2024-03-17', '2024-03-18'],
     'description': ['Grocery Store', 'Grocery Store', 'Restaurant', 'Gas Station'],
-    'amount': [-123.45, -123.45, -67.89, -45.00],
+    'amount': [123.45, 123.45, 67.89, 45.00],  # Note: Discover shows positive amounts for debits
     'category': ['Food', 'Food', 'Food', 'Transportation'],
     'source_file': ['discover_card.csv', 'discover_card.csv', 'discover_card.csv', 'discover_card.csv']
 }
 ```
 
-#### Aggregator Record
+#### Detail Records (Example - Amex)
 ```python
 {
-    'transaction_date': ['2024-03-16', '2024-03-16', '2024-03-19'],
-    'post_date': ['2024-03-16', '2024-03-16', '2024-03-19'],
-    'description': ['Grocery Store', 'Restaurant', 'Online Purchase'],
-    'amount': [-123.45, -67.89, -99.99],
-    'category': ['Groceries', 'Dining', 'Shopping'],
-    'tags': ['', '', ''],
-    'account': ['Discover', 'Discover', 'Discover'],
-    'source_file': ['aggregator', 'aggregator', 'aggregator']
+    'transaction_date': ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17'],
+    'description': ['Grocery Store', 'Grocery Store', 'Restaurant', 'Gas Station'],
+    'amount': [-123.45, 123.45, -67.89, 45.00],  # Note: Amex uses mixed signs for debits
+    'category': ['Food', 'Food', 'Food', 'Transportation'],
+    'source_file': ['amex_card.csv', 'amex_card.csv', 'amex_card.csv', 'amex_card.csv']
 }
 ```
+
+#### Detail Records (Example - Capital One)
+```python
+{
+    'transaction_date': ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17'],
+    'post_date': ['2024-03-16', '2024-03-16', '2024-03-17', '2024-03-18'],
+    'description': ['Grocery Store', 'Grocery Store', 'Restaurant', 'Gas Station'],
+    'debit': [123.45, 123.45, 67.89, 45.00],  # Note: Capital One uses separate Debit/Credit columns
+    'credit': [None, None, None, None],
+    'category': ['Food', 'Food', 'Food', 'Transportation'],
+    'source_file': ['capital_one.csv', 'capital_one.csv', 'capital_one.csv', 'capital_one.csv']
+}
+```
+
+#### Detail Records (Example - Alliant)
+```python
+{
+    'transaction_date': ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17'],
+    'description': ['Grocery Store', 'Grocery Store', 'Restaurant', 'Gas Station'],
+    'amount': ['$123.45', '$123.45', '$67.89', '$45.00'],  # Note: Alliant uses $ symbol and positive amounts
+    'category': ['Food', 'Food', 'Food', 'Transportation'],
+    'source_file': ['alliant.csv', 'alliant.csv', 'alliant.csv', 'alliant.csv']
+}
+```
+
+#### Detail Records (Example - Chase)
+```python
+{
+    'transaction_date': ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17'],
+    'post_date': ['2024-03-16', '2024-03-16', '2024-03-17', '2024-03-18'],
+    'description': ['Grocery Store', 'Grocery Store', 'Restaurant', 'Gas Station'],
+    'amount': [-123.45, -123.45, -67.89, -45.00],  # Note: Chase shows negative amounts for debits
+    'category': ['Food', 'Food', 'Food', 'Transportation'],
+    'source_file': ['chase.csv', 'chase.csv', 'chase.csv', 'chase.csv']
+}
+```
+
+#### Aggregator Record (Example - Empower)
+```python
+{
+    'transaction_date': ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17'],
+    'description': ['Grocery Store', 'Grocery Store', 'Restaurant', 'Gas Station'],
+    'amount': [-123.45, -123.45, -67.89, -45.00],  # Note: Aggregator shows negative amounts for debits
+    'category': ['Food', 'Food', 'Food', 'Transportation'],
+    'tags': ['', '', '', ''],
+    'account': ['Discover', 'Discover', 'Discover', 'Discover'],
+    'source_file': ['empower.csv', 'empower.csv', 'empower.csv', 'empower.csv']
+}
+```
+
+### Standardized Format
+After processing, all records are standardized to:
+```python
+{
+    'transaction_date': ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17'],
+    'post_date': ['2024-03-16', '2024-03-16', '2024-03-17', '2024-03-18'],
+    'description': ['Grocery Store', 'Grocery Store', 'Restaurant', 'Gas Station'],
+    'amount': [-123.45, -123.45, -67.89, -45.00],  # All amounts standardized to negative for debits
+    'category': ['Food', 'Food', 'Food', 'Transportation'],
+    'tags': ['', '', '', ''],
+    'account': ['Discover', 'Discover', 'Discover', 'Discover'],
+    'source_file': ['discover_card.csv', 'discover_card.csv', 'discover_card.csv', 'discover_card.csv']
+}
+```
+
+### Amount Sign Handling by Format
+Each format requires specific processing to standardize amounts:
+
+1. **Discover Format**
+   - Raw data: Positive amounts for debits
+   - Processing: Invert all amounts (multiply by -1)
+
+2. **Amex Format**
+   - Raw data: Mixed signs (some positive, some negative for debits)
+   - Processing: Invert all amounts (multiply by -1)
+
+3. **Capital One Format**
+   - Raw data: Separate Debit and Credit columns
+   - Processing: Combine columns, negate debits, keep credits positive
+
+4. **Alliant Format**
+   - Raw data: Positive amounts with $ symbol
+   - Processing: Remove $ symbol, invert all amounts (multiply by -1)
+
+5. **Chase Format**
+   - Raw data: Negative amounts for debits
+   - Processing: Keep original signs
+
+6. **Aggregator Format (Empower)**
+   - Raw data: Negative amounts for debits
+   - Processing: Keep original signs
 
 ### Intermediate DataFrames
 
@@ -191,7 +319,7 @@ Aggregator records are standardized to:
     'transaction_date': ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17'],
     'post_date': ['2024-03-16', '2024-03-16', '2024-03-17', '2024-03-18'],
     'description': ['Grocery Store', 'Grocery Store', 'Restaurant', 'Gas Station'],
-    'amount': [-123.45, -123.45, -67.89, -45.00],
+    'amount': [123.45, 123.45, 67.89, 45.00],  # Note: Discover shows positive amounts for debits
     'category': ['Food', 'Food', 'Food', 'Transportation'],
     'source_file': ['discover_card.csv', 'discover_card.csv', 'discover_card.csv', 'discover_card.csv']
 }
@@ -414,25 +542,6 @@ The tool generates:
 - Generates detailed reconciliation reports in Excel format
 - Comprehensive logging for debugging and auditing
 - Graceful error handling for various edge cases
-
-## Installation
-
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd local_reconcile
-```
-
-2. Create and activate a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
 
 ## Development
 
