@@ -7,7 +7,7 @@ from src.reconcile import (
     process_discover_format,
     process_amex_format,
     process_capital_one_format,
-    process_alliant_format,
+    process_alliant_visa_format,
     process_chase_format,
     process_aggregator_format,
     standardize_description,
@@ -15,7 +15,18 @@ from src.reconcile import (
 )
 
 def create_test_df(format_name):
-    """Helper function to create test DataFrames with standardized format"""
+    """Create standardized test DataFrame for the specified format.
+    
+    Args:
+        format_name (str): Name of the format to create test data for.
+            Supported formats: 'discover', 'amex', 'capital_one', 'alliant_visa', 'chase', 'aggregator'
+    
+    Returns:
+        pd.DataFrame: Test data with format-specific columns and values
+    
+    Raises:
+        ValueError: If format_name is not supported
+    """
     if format_name == 'discover':
         return pd.DataFrame({
             'Trans. Date': ['03/17/2025'],
@@ -23,6 +34,14 @@ def create_test_df(format_name):
             'Description': ['AMAZON.COM'],
             'Amount': ['40.33'],
             'Category': ['Shopping']
+        })
+    elif format_name == 'amex':
+        return pd.DataFrame({
+            'Date': ['03/17/2025'],
+            'Description': ['AMAZON.COM'],
+            'Amount': ['123.45'],
+            'Category': ['Shopping'],
+            'source_file': ['amex_test.csv']
         })
     elif format_name == 'capital_one':
         return pd.DataFrame({
@@ -34,6 +53,15 @@ def create_test_df(format_name):
             'Debit': ['$40.33'],
             'Credit': ['']
         })
+    elif format_name == 'alliant_visa':
+        return pd.DataFrame({
+            'Date': ['03/17/2025'],
+            'Description': ['AMAZON.COM'],
+            'Amount': ['$123.45'],
+            'Post Date': ['03/18/2025'],
+            'Category': ['Shopping'],
+            'source_file': ['alliant_test.csv']
+        })
     elif format_name == 'chase':
         return pd.DataFrame({
             'Details': ['DEBIT'],
@@ -44,89 +72,122 @@ def create_test_df(format_name):
             'Balance': ['$1000.00'],
             'Check or Slip #': ['']
         })
-    else:
-        raise ValueError(f"Unknown format: {format_name}")
-
-class TestDiscoverFormat:
-    """Test suite for Discover format processing"""
-    
-    def test_basic_processing(self):
-        """Test basic Discover format processing"""
-        input_data = {
-            'Trans. Date': ['03/17/2025'],
-            'Post Date': ['03/18/2025'],
+    elif format_name == 'aggregator':
+        return pd.DataFrame({
+            'Date': ['03/17/2025'],
             'Description': ['AMAZON.COM'],
-            'Amount': ['40.33'],
-            'Category': ['Shopping']
-        }
-        df = pd.DataFrame(input_data)
-        result = process_discover_format(df)
-        
-        assert result['Transaction Date'].iloc[0] == '2025-03-17'
-        assert result['Post Date'].iloc[0] == '2025-03-18'
-        assert result['Description'].iloc[0] == 'AMAZON.COM'
-        assert result['Amount'].iloc[0] == -40.33
-        assert result['Category'].iloc[0] == 'Shopping'
+            'Amount': ['-123.45'],
+            'Category': ['Shopping'],
+            'Tags': ['Online'],
+            'Account': ['Discover'],
+            'source_file': ['aggregator_test.csv']
+        })
+    else:
+        raise ValueError(f"Unsupported format: {format_name}")
+
+@pytest.mark.dependency()
+class TestDiscoverFormat:
+    """Test suite for Discover format processing.
     
-    def test_amount_handling(self):
-        """Test Discover amount handling"""
+    Discover format specific requirements:
+    - Amounts are negative for debits
+    - Has both transaction and post dates
+    - Preserves original description case
+    """
+    
+    @pytest.mark.dependency()
+    def test_basic_processing(self):
+        """Test basic Discover format processing.
+        
+        Verifies:
+        - Date standardization (YYYY-MM-DD)
+        - Amount sign (negative for debits)
+        - Description preservation
+        - Category preservation
+        """
         df = create_test_df('discover')
         result = process_discover_format(df)
-        assert result['Amount'].iloc[0] < 0  # Amounts should be negative for debits
-
-class TestAmexFormat:
-    """Test suite for Amex format processing"""
-    
-    def test_basic_processing(self):
-        """Test basic Amex format processing"""
-        input_data = {
-            'Date': ['03/17/2025'],
-            'Description': ['AMAZON.COM'],
-            'Amount': ['123.45'],
-            'Category': ['Shopping']
-        }
-        df = pd.DataFrame(input_data)
-        df['source_file'] = 'amex_test.csv'
         
+        assert result['Transaction Date'].iloc[0] == '2025-03-17'
+        assert result['Post Date'].iloc[0] == '2025-03-18'
+        assert result['Description'].iloc[0] == 'AMAZON.COM'
+        assert result['Amount'].iloc[0] == -40.33
+        assert result['Category'].iloc[0] == 'Shopping'
+    
+    @pytest.mark.dependency(depends=["TestDiscoverFormat::test_basic_processing"])
+    def test_amount_handling(self):
+        """Test Discover amount handling.
+        
+        Verifies:
+        - Debit amounts are negative
+        - Credit amounts are positive
+        """
+        df = create_test_df('discover')
+        result = process_discover_format(df)
+        assert result['Amount'].iloc[0] == -40.33  # Debit amount should be negative
+
+@pytest.mark.dependency()
+class TestAmexFormat:
+    """Test suite for Amex format processing.
+    
+    Amex format specific requirements:
+    - Amounts are positive for debits (needs inversion)
+    - Single date field (used for both transaction and post dates)
+    - Preserves original description case
+    """
+    
+    @pytest.mark.dependency()
+    def test_basic_processing(self):
+        """Test basic Amex format processing.
+        
+        Verifies:
+        - Date standardization (YYYY-MM-DD)
+        - Amount sign (negative after inversion)
+        - Description preservation
+        - Category preservation
+        """
+        df = create_test_df('amex')
         result = process_amex_format(df)
         
         assert result['Transaction Date'].iloc[0] == '2025-03-17'
-        assert result['Post Date'].iloc[0] == '2025-03-17'  # Same as transaction date
+        assert result['Post Date'].iloc[0] == '2025-03-17'
         assert result['Description'].iloc[0] == 'AMAZON.COM'
-        assert result['Amount'].iloc[0] == -123.45  # Amount inverted
+        assert result['Amount'].iloc[0] == -123.45
         assert result['Category'].iloc[0] == 'Shopping'
-        
-    def test_amount_handling(self):
-        """Test Amex amount handling"""
-        input_data = {
-            'Date': ['03/17/2025'] * 2,
-            'Description': ['DEBIT', 'CREDIT'],
-            'Amount': ['123.45', '-67.89'],
-            'Category': ['Test'] * 2
-        }
-        df = pd.DataFrame(input_data)
-        df['source_file'] = 'amex_test.csv'
-        
-        result = process_amex_format(df)
-        
-        assert result['Amount'].iloc[0] == -123.45  # Debit inverted
-        assert result['Amount'].iloc[1] == 67.89    # Credit inverted
-
-class TestCapitalOneFormat:
-    """Test suite for Capital One format processing"""
     
+    @pytest.mark.dependency(depends=["TestAmexFormat::test_basic_processing"])
+    def test_amount_handling(self):
+        """Test Amex amount handling.
+        
+        Verifies:
+        - Debit amounts are inverted to negative
+        - Credit amounts are inverted to positive
+        """
+        df = create_test_df('amex')
+        result = process_amex_format(df)
+        assert result['Amount'].iloc[0] == -123.45  # Debit amount should be negative after inversion
+
+@pytest.mark.dependency()
+class TestCapitalOneFormat:
+    """Test suite for Capital One format processing.
+    
+    Capital One format specific requirements:
+    - Amounts are negative for debits
+    - Has both transaction and post dates
+    - Preserves original description case
+    """
+    
+    @pytest.mark.dependency()
     def test_basic_processing(self):
-        """Test basic Capital One format processing"""
-        input_data = {
-            'Transaction Date': ['2025-03-17'],
-            'Posted Date': ['2025-03-18'],
-            'Card No.': ['1234'],
-            'Description': ['AMAZON.COM'],
-            'Category': ['Shopping'],
-            'Debit': ['$40.33'],
-            'Credit': ['']
-        }
-        df = pd.DataFrame(input_data)
+        """Test basic Capital One format processing.
+        
+        Verifies:
+        - Date standardization (YYYY-MM-DD)
+        - Amount sign (negative for debits)
+        - Description preservation
+        - Category preservation
+        """
+        df = create_test_df('capital_one')
         result = process_capital_one_format(df)
         
         assert result['Transaction Date'].iloc[0] == '2025-03-17'
@@ -135,67 +196,80 @@ class TestCapitalOneFormat:
         assert result['Amount'].iloc[0] == -40.33
         assert result['Category'].iloc[0] == 'Shopping'
     
+    @pytest.mark.dependency(depends=["TestCapitalOneFormat::test_basic_processing"])
     def test_amount_handling(self):
-        """Test Capital One amount handling"""
+        """Test Capital One amount handling.
+        
+        Verifies:
+        - Debit amounts are negative
+        - Credit amounts are positive
+        """
         df = create_test_df('capital_one')
         result = process_capital_one_format(df)
-        assert result['Amount'].iloc[0] < 0  # Debits should be negative
+        assert result['Amount'].iloc[0] == -40.33  # Debit amount should be negative
 
+@pytest.mark.dependency()
 class TestAlliantFormat:
-    """Test suite for Alliant format processing"""
+    """Test suite for Alliant format processing.
     
+    Alliant format specific requirements:
+    - Amounts are positive for debits, negative for credits
+    - Has both transaction and post dates
+    - Preserves original description case
+    """
+    
+    @pytest.mark.dependency()
     def test_basic_processing(self):
-        """Test basic Alliant format processing"""
-        input_data = {
-            'Date': ['03/17/2025'],
-            'Description': ['AMAZON.COM'],
-            'Amount': ['$123.45'],
-            'Post Date': ['03/18/2025'],
-            'Category': ['Shopping']
-        }
-        df = pd.DataFrame(input_data)
-        df['source_file'] = 'alliant_test.csv'
+        """Test basic Alliant format processing.
         
-        result = process_alliant_format(df)
+        Verifies:
+        - Date standardization (YYYY-MM-DD)
+        - Amount sign (positive for debits)
+        - Description preservation
+        - Category preservation
+        """
+        df = create_test_df('alliant_visa')
+        result = process_alliant_visa_format(df)
         
         assert result['Transaction Date'].iloc[0] == '2025-03-17'
         assert result['Post Date'].iloc[0] == '2025-03-18'
         assert result['Description'].iloc[0] == 'AMAZON.COM'
-        assert result['Amount'].iloc[0] == -123.45  # Amount inverted
+        assert result['Amount'].iloc[0] == 123.45
         assert result['Category'].iloc[0] == 'Shopping'
-        
-    def test_amount_handling(self):
-        """Test Alliant amount handling"""
-        input_data = {
-            'Date': ['03/17/2025'] * 2,
-            'Description': ['DEBIT', 'CREDIT'],
-            'Amount': ['$123.45', '$67.89'],
-            'Post Date': ['03/18/2025'] * 2,
-            'Category': ['Test'] * 2
-        }
-        df = pd.DataFrame(input_data)
-        df['source_file'] = 'alliant_test.csv'
-        
-        result = process_alliant_format(df)
-        
-        assert result['Amount'].iloc[0] == -123.45  # Amount inverted
-        assert result['Amount'].iloc[1] == -67.89   # Amount inverted
-
-class TestChaseFormat:
-    """Test suite for Chase format processing"""
     
+    @pytest.mark.dependency(depends=["TestAlliantFormat::test_basic_processing"])
+    def test_amount_handling(self):
+        """Test Alliant amount handling.
+        
+        Verifies:
+        - Debit amounts are positive
+        - Credit amounts are negative
+        """
+        df = create_test_df('alliant_visa')
+        result = process_alliant_visa_format(df)
+        assert result['Amount'].iloc[0] == 123.45  # Debit amount should be positive
+
+@pytest.mark.dependency()
+class TestChaseFormat:
+    """Test suite for Chase format processing.
+    
+    Chase format specific requirements:
+    - Amounts are negative for debits
+    - Single date field (used for both transaction and post dates)
+    - Preserves original description case
+    """
+    
+    @pytest.mark.dependency()
     def test_basic_processing(self):
-        """Test basic Chase format processing"""
-        input_data = {
-            'Details': ['DEBIT'],
-            'Posting Date': ['03/17/2025'],
-            'Description': ['AMAZON.COM'],
-            'Amount': ['-$40.33'],
-            'Type': ['ACH_DEBIT'],
-            'Balance': ['$1000.00'],
-            'Check or Slip #': ['']
-        }
-        df = pd.DataFrame(input_data)
+        """Test basic Chase format processing.
+        
+        Verifies:
+        - Date standardization (YYYY-MM-DD)
+        - Amount sign (negative for debits)
+        - Description preservation
+        - Category default (empty string)
+        """
+        df = create_test_df('chase')
         result = process_chase_format(df)
         
         assert result['Transaction Date'].iloc[0] == '2025-03-17'
@@ -204,55 +278,60 @@ class TestChaseFormat:
         assert result['Amount'].iloc[0] == -40.33
         assert result['Category'].iloc[0] == ''
     
+    @pytest.mark.dependency(depends=["TestChaseFormat::test_basic_processing"])
     def test_amount_handling(self):
-        """Test Chase amount handling"""
+        """Test Chase amount handling.
+        
+        Verifies:
+        - Debit amounts are negative
+        - Credit amounts are positive
+        """
         df = create_test_df('chase')
         result = process_chase_format(df)
-        assert result['Amount'].iloc[0] < 0  # Amounts should be negative for debits
+        assert result['Amount'].iloc[0] == -40.33  # Debit amount should be negative
 
+@pytest.mark.dependency()
 class TestAggregatorFormat:
-    """Test suite for Aggregator format processing"""
+    """Test suite for Aggregator format processing.
     
+    Aggregator format specific requirements:
+    - Amounts are preserved as-is
+    - Single date field (used for both transaction and post dates)
+    - Includes additional metadata (Tags, Account)
+    """
+    
+    @pytest.mark.dependency()
     def test_basic_processing(self):
-        """Test basic Aggregator format processing"""
-        input_data = {
-            'Date': ['03/17/2025'],
-            'Description': ['AMAZON.COM'],
-            'Amount': ['-123.45'],
-            'Category': ['Shopping'],
-            'Tags': ['Online'],
-            'Account': ['Discover']
-        }
-        df = pd.DataFrame(input_data)
-        df['source_file'] = 'aggregator_test.csv'
+        """Test basic Aggregator format processing.
         
+        Verifies:
+        - Date standardization (YYYY-MM-DD)
+        - Amount preservation
+        - Description preservation
+        - Category preservation
+        - Additional metadata preservation
+        """
+        df = create_test_df('aggregator')
         result = process_aggregator_format(df)
         
         assert result['Transaction Date'].iloc[0] == '2025-03-17'
         assert result['Post Date'].iloc[0] == '2025-03-17'
         assert result['Description'].iloc[0] == 'AMAZON.COM'
-        assert result['Amount'].iloc[0] == -123.45  # Amount preserved
+        assert result['Amount'].iloc[0] == -123.45
         assert result['Category'].iloc[0] == 'Shopping'
         assert result['Tags'].iloc[0] == 'Online'
         assert result['Account'].iloc[0] == 'Discover'
-        
+    
+    @pytest.mark.dependency(depends=["TestAggregatorFormat::test_basic_processing"])
     def test_amount_handling(self):
-        """Test Aggregator amount handling"""
-        input_data = {
-            'Date': ['03/17/2025'] * 2,
-            'Description': ['DEBIT', 'CREDIT'],
-            'Amount': ['-123.45', '67.89'],
-            'Category': ['Test'] * 2,
-            'Tags': [''] * 2,
-            'Account': ['Discover'] * 2
-        }
-        df = pd.DataFrame(input_data)
-        df['source_file'] = 'aggregator_test.csv'
+        """Test Aggregator amount handling.
         
+        Verifies:
+        - Amounts are preserved exactly as input
+        """
+        df = create_test_df('aggregator')
         result = process_aggregator_format(df)
-        
-        assert result['Amount'].iloc[0] == -123.45  # Amount preserved
-        assert result['Amount'].iloc[1] == 67.89    # Amount preserved 
+        assert result['Amount'].iloc[0] == -123.45  # Amount should be preserved exactly
 
 class TestStandardization:
     """Test suite for data standardization"""

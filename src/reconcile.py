@@ -87,72 +87,37 @@ def standardize_date(date_str):
         
     Returns:
         str or None: Standardized date in YYYY-MM-DD format, or None if invalid
-        
-    Supported Formats:
-        - YYYY-MM-DD (ISO)
-        - MM/DD/YYYY (US)
-        - YYYYMMDD (Compact)
-        - MMDDYYYY (Compact US)
-        - M/D/YY (Short year)
     """
-    logger.debug(f"standardize_date called with date_str: {date_str}")
-    
     if isinstance(date_str, pd.Series):
         return date_str.apply(standardize_date)
         
-    try:
-        if pd.isna(date_str):
-            return None
-            
-        if isinstance(date_str, str):
-            # Already in ISO format
-            if re.match(r'^\d{4}-\d{2}-\d{2}', date_str):
-                dt = pd.to_datetime(date_str[:10])  # Take just the date part if there's a time component
-                if dt.year > 1900 and dt.year < 2100:  # Basic validation
-                    return dt.strftime('%Y-%m-%d')
-                return None
-                
-            # US format MM/DD/YYYY
-            if re.match(r'^\d{1,2}/\d{1,2}/\d{4}$', date_str):
-                dt = pd.to_datetime(date_str, format='%m/%d/%Y')
-                if dt.year > 1900 and dt.year < 2100:
-                    return dt.strftime('%Y-%m-%d')
-                return None
-                
-            # Compact format YYYYMMDD or MMDDYYYY
-            if re.match(r'^\d{8}$', date_str):
-                try:
-                    # Try YYYYMMDD first
-                    try:
-                        dt = pd.to_datetime(date_str, format='%Y%m%d')
-                    except:
-                        # Try MMDDYYYY
-                        dt = pd.to_datetime(date_str, format='%m%d%Y')
-                    if dt.year > 1900 and dt.year < 2100:
-                        return dt.strftime('%Y-%m-%d')
-                except:
-                    return None
-                
-            # Short year format M/D/YY
-            if re.match(r'^\d{1,2}/\d{1,2}/\d{2}$', date_str):
-                try:
-                    dt = pd.to_datetime(date_str, format='%m/%d/%y')
-                    if dt.year > 1900 and dt.year < 2100:
-                        return dt.strftime('%Y-%m-%d')
-                except:
-                    return None
+    if pd.isna(date_str):
+        return None
         
-        # For any other format, let pandas try to parse it
+    if not isinstance(date_str, str):
+        return None
+        
+    # Try different date formats
+    formats = [
+        '%Y-%m-%d',  # ISO
+        '%Y-%m-%d %H:%M:%S',  # ISO with time
+        '%m/%d/%Y',  # US
+        '%m-%d-%Y',  # US with dashes
+        '%Y%m%d',    # Compact
+        '%m%d%Y',    # Compact US
+        '%m/%d/%y'   # Short year
+    ]
+    
+    for fmt in formats:
         try:
-            dt = pd.to_datetime(date_str)
-            if dt.year > 1900 and dt.year < 2100:
-                return dt.strftime('%Y-%m-%d')
-        except:
-            pass
-        
-        return None
-    except:
-        return None
+            dt = datetime.strptime(date_str, fmt)
+            if dt.year < 1900 or dt.year > 2100:
+                return None
+            return dt.strftime('%Y-%m-%d')
+        except ValueError:
+            continue
+            
+    return None
 
 def clean_amount(amount_str):
     """
@@ -164,30 +129,74 @@ def clean_amount(amount_str):
     Returns:
         float: Cleaned amount as a float
         
-    Notes:
-        - Removes currency symbols ($) and commas
-        - Returns 0.0 for invalid inputs
-        - Handles pandas Series by applying the function to each element
-        - Handles debit/credit columns by making debits negative
+    Raises:
+        ValueError: If amount format is invalid and cannot be parsed
     """
-    logger.debug(f"clean_amount called with amount_str: {amount_str}")
-    
     if isinstance(amount_str, pd.Series):
         return amount_str.apply(clean_amount)
-    
-    if pd.isna(amount_str):
-        return 0.0
         
-    if isinstance(amount_str, str):
-        # Remove currency symbols and commas
-        amount_str = amount_str.replace('$', '').replace(',', '')
-        # Handle parentheses for negative numbers
-        if amount_str.startswith('(') and amount_str.endswith(')'):
-            amount_str = '-' + amount_str[1:-1]
+    if pd.isna(amount_str):
+        raise ValueError("Amount cannot be null")
+        
+    if isinstance(amount_str, (int, float)):
+        return float(amount_str)
+        
+    if not isinstance(amount_str, str):
+        raise ValueError("Invalid amount format")
+        
+    # Remove currency symbols and commas
+    amount_str = amount_str.replace('$', '').replace(',', '').strip()
+    
+    # Handle parentheses for negative numbers
+    if amount_str.startswith('(') and amount_str.endswith(')'):
+        amount_str = '-' + amount_str[1:-1]
+        
     try:
         return float(amount_str)
-    except:
-        return 0.0
+    except ValueError:
+        raise ValueError("Invalid amount format")
+
+def standardize_description(description):
+    """
+    Standardize transaction descriptions by removing noise while preserving case and special characters.
+    
+    Args:
+        description (str): Raw transaction description
+        
+    Returns:
+        str: Standardized description
+        
+    Raises:
+        ValueError: If description is empty or invalid
+    """
+    if pd.isna(description):
+        raise ValueError("Description cannot be empty")
+        
+    if not isinstance(description, str):
+        raise ValueError("Description cannot be empty")
+        
+    # Remove extra spaces
+    description = ' '.join(description.split())
+    
+    if not description:
+        raise ValueError("Description cannot be empty")
+        
+    return description
+
+def standardize_category(category):
+    """
+    Standardize transaction categories to a common format.
+    
+    Args:
+        category (str): Raw transaction category
+        
+    Returns:
+        str: Standardized category
+    """
+    if pd.isna(category) or not isinstance(category, str) or not category.strip():
+        return 'Uncategorized'
+        
+    return category.strip()
 
 def is_valid_amount(x):
     """
@@ -227,332 +236,209 @@ def is_valid_amount(x):
 
 def process_discover_format(df):
     """
-    Process Discover credit card transactions into standardized format.
+    Process Discover transactions into standardized format.
     
     Args:
-        df (pd.DataFrame): DataFrame containing Discover transactions with columns:
-            - Trans. Date or Transaction Date: Date of the transaction
-            - Post Date: Date the transaction posted
-            - Description: Transaction description
-            - Amount: Transaction amount (with $ and commas)
-            - Category: Transaction category (optional)
-    
+        df (pd.DataFrame): Raw transaction data
+        
     Returns:
-        pd.DataFrame: Standardized transaction data with columns:
-            - Transaction Date: Standardized date (YYYY-MM-DD)
-            - Post Date: Standardized date (YYYY-MM-DD)
-            - Description: Cleaned description
-            - Amount: Numeric amount (negative for debits)
-            - Category: Transaction category
-            - source_file: Set to 'discover'
-            
+        pd.DataFrame: Standardized transaction data
+        
     Raises:
         ValueError: If any required field is invalid or missing
     """
-    result = df.copy()
+    # Create result DataFrame with standardized columns
+    result = pd.DataFrame()
     
-    # Validate required fields
-    if 'Description' not in df.columns or df['Description'].isna().any() or (df['Description'] == '').any():
-        raise ValueError("Description is required and cannot be empty")
-        
-    # Handle both possible transaction date column names
-    trans_date_col = 'Trans. Date' if 'Trans. Date' in df.columns else 'Transaction Date'
-    if trans_date_col not in df.columns:
-        raise ValueError(f"Missing required column: {trans_date_col}")
-        
-    if 'Post Date' not in df.columns:
-        raise ValueError("Missing required column: Post Date")
-        
-    if 'Amount' not in df.columns:
-        raise ValueError("Missing required column: Amount")
-        
-    # Validate amount format before cleaning
-    def is_valid_amount(x):
-        if pd.isna(x):
-            return False
-        try:
-            # Remove currency symbols and commas
-            if isinstance(x, str):
-                x = x.replace('$', '').replace(',', '')
-                # Handle parentheses for negative numbers
-                if x.startswith('(') and x.endswith(')'):
-                    x = '-' + x[1:-1]
-            float(x)
-            return True
-        except:
-            return False
-            
-    if not df['Amount'].apply(is_valid_amount).all():
-        raise ValueError("Invalid amount format")
+    # Map date columns
+    result['Transaction Date'] = df['Trans. Date'].apply(standardize_date)
+    result['Post Date'] = df['Post Date'].apply(standardize_date)
     
     # Validate dates
-    result['Transaction Date'] = result[trans_date_col].apply(standardize_date)
-    result['Post Date'] = result['Post Date'].apply(standardize_date)
-    
-    if result['Transaction Date'].isna().any() or result['Post Date'].isna().any():
+    if result['Transaction Date'].isna().any():
+        raise ValueError("Invalid date format")
+    if result['Post Date'].isna().any():
         raise ValueError("Invalid date format")
         
     # Validate post date is not before transaction date
     if (pd.to_datetime(result['Post Date']) < pd.to_datetime(result['Transaction Date'])).any():
         raise ValueError("Post date cannot be before transaction date")
     
-    # Clean amount
-    result['Amount'] = result['Amount'].apply(clean_amount)  # Discover amounts are already negative for debits
+    # Map description
+    result['Description'] = df['Description'].apply(standardize_description)
     
-    result['Description'] = result['Description'].str.strip()
-    result['Category'] = result.get('Category', pd.Series('', index=result.index))
-    result['source_file'] = result.get('source_file', pd.Series('discover', index=result.index))
-    return result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
+    # Convert amount to float and ensure debits are negative
+    result['Amount'] = df['Amount'].apply(clean_amount).apply(lambda x: -abs(x) if x > 0 else x)
+    
+    # Map category
+    result['Category'] = df['Category'].apply(standardize_category)
+    
+    # Add source file information
+    result['source_file'] = 'discover'
+    
+    return result
 
 def process_capital_one_format(df):
-    """
-    Process Capital One transactions into standardized format.
+    """Process Capital One format transactions.
     
     Args:
-        df (pd.DataFrame): DataFrame containing Capital One transactions with columns:
-            - Transaction Date: Date of the transaction
-            - Posted Date: Date the transaction posted
-            - Description: Transaction description
-            - Debit: Debit amount (if applicable)
-            - Credit: Credit amount (if applicable)
-            - Category: Transaction category (optional)
-    
+        df (pd.DataFrame): Raw transaction data
+        
     Returns:
-        pd.DataFrame: Standardized transaction data with columns:
-            - Transaction Date: Standardized date (YYYY-MM-DD)
-            - Post Date: Standardized date (YYYY-MM-DD)
-            - Description: Cleaned description
-            - Amount: Numeric amount (negative for debits)
-            - Category: Transaction category
-            - source_file: Set to 'capital_one'
-            
+        pd.DataFrame: Standardized transaction data
+        
     Raises:
         ValueError: If any required field is invalid or missing
     """
-    result = df.copy()
+    # Create result DataFrame with standardized columns
+    result = pd.DataFrame()
     
-    # Validate required fields
-    if 'Description' not in df.columns or df['Description'].isna().any() or (df['Description'] == '').any():
-        raise ValueError("Description is required and cannot be empty")
-        
-    if 'Transaction Date' not in df.columns:
-        raise ValueError("Missing required column: Transaction Date")
-        
-    if 'Posted Date' not in df.columns:
-        raise ValueError("Missing required column: Posted Date")
-        
-    if 'Debit' not in df.columns or 'Credit' not in df.columns:
-        raise ValueError("Missing required columns: Debit and/or Credit")
-        
-    # Validate amount format before cleaning
-    def is_valid_amount(x):
-        if pd.isna(x) or x == '':
-            return True  # Allow empty values for Debit/Credit columns
-        try:
-            # Remove currency symbols and commas
-            if isinstance(x, str):
-                x = x.replace('$', '').replace(',', '').strip()
-                # Handle parentheses for negative numbers
-                if x.startswith('(') and x.endswith(')'):
-                    x = '-' + x[1:-1]
-            # Try converting to float
-            float(x)
-            return True
-        except (ValueError, TypeError):
-            return False
-            
-    if not df['Debit'].apply(is_valid_amount).all() or not df['Credit'].apply(is_valid_amount).all():
-        raise ValueError("Invalid amount format")
+    # Map date columns
+    result['Transaction Date'] = df['Transaction Date'].apply(standardize_date)
+    result['Post Date'] = df['Posted Date'].apply(standardize_date)
     
     # Validate dates
-    result['Transaction Date'] = result['Transaction Date'].apply(standardize_date)
-    result['Post Date'] = result['Posted Date'].apply(standardize_date)
-    
-    if result['Transaction Date'].isna().any() or result['Post Date'].isna().any():
+    if result['Transaction Date'].isna().any():
+        raise ValueError("Invalid date format")
+    if result['Post Date'].isna().any():
         raise ValueError("Invalid date format")
         
     # Validate post date is not before transaction date
     if (pd.to_datetime(result['Post Date']) < pd.to_datetime(result['Transaction Date'])).any():
         raise ValueError("Post date cannot be before transaction date")
     
-    # Clean amount
-    result['Amount'] = result.apply(
-        lambda row: -clean_amount(row['Debit']) if pd.notna(row['Debit']) else clean_amount(row['Credit']),
-        axis=1
-    )
+    # Map description
+    result['Description'] = df['Description'].apply(standardize_description)
     
-    result['Description'] = result['Description'].str.strip()
-    result['Category'] = result.get('Category', pd.Series('', index=result.index))
-    result['source_file'] = result.get('source_file', pd.Series('capital_one', index=result.index))
-    return result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
+    # Convert amount to float and ensure debits are negative
+    debit = df['Debit'].apply(lambda x: -clean_amount(x) if pd.notna(x) and x != '' else 0)
+    credit = df['Credit'].apply(lambda x: clean_amount(x) if pd.notna(x) and x != '' else 0)
+    result['Amount'] = debit + credit
+    
+    # Map category
+    result['Category'] = df['Category'].apply(standardize_category)
+    
+    # Add source file information
+    result['source_file'] = 'capital_one'
+    
+    return result
 
 def process_chase_format(df):
-    """
-    Process Chase transactions into standardized format.
+    """Process Chase format transactions.
     
     Args:
-        df (pd.DataFrame): DataFrame containing Chase transactions with columns:
-            - Details: Transaction type
-            - Posting Date: Date the transaction posted
-            - Description: Transaction description
-            - Amount: Transaction amount (with $ and commas)
-            - Type: Transaction type
-            - Balance: Account balance
-            - Check or Slip #: Check number
-    
+        df (pd.DataFrame): Raw transaction data
+        
     Returns:
-        pd.DataFrame: Standardized transaction data with columns:
-            - Transaction Date: Standardized date (YYYY-MM-DD)
-            - Post Date: Standardized date (YYYY-MM-DD)
-            - Description: Cleaned description
-            - Amount: Numeric amount (negative for debits)
-            - Category: Transaction category
-            - source_file: Set to 'chase'
-            
+        pd.DataFrame: Standardized transaction data
+        
     Raises:
         ValueError: If any required field is invalid or missing
     """
-    result = df.copy()
+    # Create result DataFrame with standardized columns
+    result = pd.DataFrame()
     
-    # Validate required fields
-    if 'Description' not in df.columns or df['Description'].isna().any() or (df['Description'] == '').any():
-        raise ValueError("Description is required and cannot be empty")
-        
-    if 'Posting Date' not in df.columns:
-        raise ValueError("Missing required column: Posting Date")
-        
-    if 'Amount' not in df.columns:
-        raise ValueError("Missing required column: Amount")
-        
-    # Validate amount format before cleaning
-    if not df['Amount'].apply(is_valid_amount).all():
-        raise ValueError("Invalid amount format")
+    # Map date columns
+    result['Transaction Date'] = df['Posting Date'].apply(standardize_date)  # Chase only provides posting date
+    result['Post Date'] = df['Posting Date'].apply(standardize_date)
     
     # Validate dates
-    result['Transaction Date'] = result['Posting Date'].apply(standardize_date)  # Chase only provides posting date
-    result['Post Date'] = result['Posting Date'].apply(standardize_date)
-    
-    if result['Transaction Date'].isna().any() or result['Post Date'].isna().any():
+    if result['Transaction Date'].isna().any():
+        raise ValueError("Invalid date format")
+    if result['Post Date'].isna().any():
         raise ValueError("Invalid date format")
     
-    # Clean amount
-    result['Amount'] = result['Amount'].apply(clean_amount)  # Chase amounts are already negative for debits
+    # Map description
+    result['Description'] = df['Description'].apply(standardize_description)
     
-    result['Description'] = result['Description'].str.strip()
-    result['Category'] = result.get('Category', pd.Series('', index=result.index))
-    result['source_file'] = result.get('source_file', pd.Series('chase', index=result.index))
-    return result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
+    # Convert amount to float and ensure debits are negative
+    result['Amount'] = df['Amount'].apply(clean_amount)
+    
+    # Map category (Chase doesn't provide categories)
+    result['Category'] = 'Uncategorized'
+    
+    # Add source file information
+    result['source_file'] = 'chase'
+    
+    return result
 
 def process_amex_format(df):
-    """
-    Process American Express credit card transactions into standardized format.
+    """Process American Express format transactions.
     
     Args:
-        df (pd.DataFrame): DataFrame containing Amex transactions with columns:
-            - Date: Date of the transaction (MM/DD/YYYY)
-            - Description: Transaction description
-            - Card Member: Name of card member
-            - Account #: Account number
-            - Amount: Transaction amount (positive for debits, negative for credits)
-    
+        df (pd.DataFrame): Raw transaction data
+        
     Returns:
-        pd.DataFrame: Standardized transaction data with columns:
-            - Transaction Date: Standardized date (YYYY-MM-DD)
-            - Post Date: Standardized date (YYYY-MM-DD)
-            - Description: Cleaned description
-            - Amount: Numeric amount (negative for debits)
-            - Category: Empty string (Amex doesn't provide categories)
-            - source_file: Set to 'amex'
-            
+        pd.DataFrame: Standardized transaction data
+        
     Raises:
         ValueError: If any required field is invalid or missing
     """
-    result = df.copy()
+    # Create result DataFrame with standardized columns
+    result = pd.DataFrame()
     
-    # Validate required fields
-    if 'Description' not in df.columns or df['Description'].isna().any() or (df['Description'] == '').any():
-        raise ValueError("Description is required and cannot be empty")
-        
-    if 'Date' not in df.columns:
-        raise ValueError("Missing required column: Date")
-        
-    if 'Amount' not in df.columns:
-        raise ValueError("Missing required column: Amount")
-        
-    # Validate amount format before cleaning
-    if not df['Amount'].apply(is_valid_amount).all():
-        raise ValueError("Invalid amount format")
+    # Map date columns
+    result['Transaction Date'] = df['Date'].apply(standardize_date)
+    result['Post Date'] = df['Date'].apply(standardize_date)  # AMEX only provides transaction date
     
     # Validate dates
-    result['Transaction Date'] = result['Date'].apply(standardize_date)
-    result['Post Date'] = result['Transaction Date']  # Amex doesn't provide post date
-    
     if result['Transaction Date'].isna().any():
         raise ValueError("Invalid date format")
+    if result['Post Date'].isna().any():
+        raise ValueError("Invalid date format")
     
-    # Clean amount
-    result['Amount'] = result['Amount'].apply(clean_amount) * -1  # Convert to negative for debits
+    # Map description
+    result['Description'] = df['Description'].apply(standardize_description)
     
-    result['Description'] = result['Description'].str.strip()
-    result['Category'] = ''  # Amex doesn't provide categories
-    result['source_file'] = result.get('source_file', pd.Series('amex', index=result.index))
-    return result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
+    # Convert amount to float and ensure debits are negative
+    result['Amount'] = df['Amount'].apply(clean_amount).apply(lambda x: -abs(x) if x > 0 else x)
+    
+    # Map category
+    result['Category'] = df['Category'].apply(standardize_category)
+    
+    # Add source file information
+    result['source_file'] = 'amex'
+    
+    return result
 
 def process_aggregator_format(df):
-    """
-    Process Empower (aggregator) transactions into standardized format.
+    """Process Aggregator (Empower) format transactions.
     
     Args:
-        df (pd.DataFrame): DataFrame containing Empower transactions with columns:
-            - Date: Date of the transaction (YYYY-MM-DD)
-            - Account: Account name
-            - Description: Transaction description
-            - Category: Transaction category
-            - Tags: Transaction tags
-            - Amount: Transaction amount (negative for debits, positive for credits)
-    
+        df (pd.DataFrame): Raw transaction data
+        
     Returns:
-        pd.DataFrame: Standardized transaction data with columns:
-            - Transaction Date: Standardized date (YYYY-MM-DD)
-            - Post Date: Standardized date (YYYY-MM-DD)
-            - Description: Cleaned description
-            - Amount: Numeric amount (negative for debits)
-            - Category: Transaction category
-            - source_file: Set to 'empower'
-            
+        pd.DataFrame: Standardized transaction data
+        
     Raises:
         ValueError: If any required field is invalid or missing
     """
-    result = df.copy()
+    # Create result DataFrame with standardized columns
+    result = pd.DataFrame()
     
-    # Validate required fields
-    if 'Description' not in df.columns or df['Description'].isna().any() or (df['Description'] == '').any():
-        raise ValueError("Description is required and cannot be empty")
-        
-    if 'Date' not in df.columns:
-        raise ValueError("Missing required column: Date")
-        
-    if 'Amount' not in df.columns:
-        raise ValueError("Missing required column: Amount")
-        
-    # Validate amount format before cleaning
-    if not df['Amount'].apply(is_valid_amount).all():
-        raise ValueError("Invalid amount format")
+    # Map date columns
+    result['Transaction Date'] = df['Date'].apply(standardize_date)
+    result['Post Date'] = df['Date'].apply(standardize_date)  # Aggregator only provides transaction date
     
     # Validate dates
-    result['Transaction Date'] = result['Date'].apply(standardize_date)
-    result['Post Date'] = result['Transaction Date']  # Empower doesn't provide post date
-    
     if result['Transaction Date'].isna().any():
         raise ValueError("Invalid date format")
+    if result['Post Date'].isna().any():
+        raise ValueError("Invalid date format")
     
-    # Clean amount
-    result['Amount'] = result['Amount'].apply(clean_amount) * -1  # Convert to negative for debits
+    # Map description
+    result['Description'] = df['Description'].apply(standardize_description)
     
-    result['Description'] = result['Description'].str.strip()
-    result['Category'] = result.get('Category', pd.Series('', index=result.index))
-    result['source_file'] = result.get('source_file', pd.Series('empower', index=result.index))
-    return result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
+    # Convert amount to float (Aggregator amounts are already correctly signed)
+    result['Amount'] = df['Amount'].apply(clean_amount)
+    
+    # Map category
+    result['Category'] = df['Category'].apply(standardize_category)
+    
+    # Add source file information
+    result['source_file'] = 'aggregator'
+    
+    return result
 
 def process_post_date_format(df):
     """
@@ -649,124 +535,86 @@ def process_debit_credit_format(df):
     return result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
 
 def process_alliant_checking_format(df):
-    """
-    Process Alliant checking transactions into standardized format.
+    """Process Alliant Checking format transactions.
     
     Args:
-        df (pd.DataFrame): DataFrame containing Alliant checking transactions with columns:
-            - Date: Transaction date
-            - Description: Transaction description
-            - Amount: Transaction amount (with $ and commas)
-            - Balance: Account balance
-    
+        df (pd.DataFrame): Raw transaction data
+        
     Returns:
-        pd.DataFrame: Standardized transaction data with columns:
-            - Transaction Date: Standardized date (YYYY-MM-DD)
-            - Post Date: Standardized date (YYYY-MM-DD)
-            - Description: Cleaned description
-            - Amount: Numeric amount (negative for debits)
-            - Category: Transaction category
-            - source_file: Set to 'alliant_checking'
-            
+        pd.DataFrame: Standardized transaction data
+        
     Raises:
         ValueError: If any required field is invalid or missing
     """
-    result = df.copy()
+    # Create result DataFrame with standardized columns
+    result = pd.DataFrame()
     
-    # Validate required fields
-    if 'Description' not in df.columns or df['Description'].isna().any() or (df['Description'] == '').any():
-        raise ValueError("Description is required and cannot be empty")
-        
-    if 'Date' not in df.columns:
-        raise ValueError("Missing required column: Date")
-        
-    if 'Amount' not in df.columns:
-        raise ValueError("Missing required column: Amount")
-        
-    # Validate amount format before cleaning
-    if not df['Amount'].apply(is_valid_amount).all():
-        raise ValueError("Invalid amount format")
+    # Map date columns
+    result['Transaction Date'] = df['Date'].apply(standardize_date)
+    result['Post Date'] = df['Date'].apply(standardize_date)  # Alliant only provides transaction date
     
     # Validate dates
-    result['Transaction Date'] = result['Date'].apply(standardize_date)
-    result['Post Date'] = result['Date'].apply(standardize_date)  # Alliant only provides one date
-    
     if result['Transaction Date'].isna().any():
         raise ValueError("Invalid date format")
+    if result['Post Date'].isna().any():
+        raise ValueError("Invalid date format")
     
-    # Clean amount
-    result['Amount'] = result['Amount'].apply(clean_amount)  # Alliant amounts are already negative for debits
+    # Map description
+    result['Description'] = df['Description'].apply(standardize_description)
     
-    result['Description'] = result['Description'].str.strip()
-    result['Category'] = result.get('Category', pd.Series('', index=result.index))
-    result['source_file'] = result.get('source_file', pd.Series('alliant_checking', index=result.index))
-    return result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
+    # Convert amount to float and ensure debits are negative
+    result['Amount'] = df['Amount'].apply(clean_amount).apply(lambda x: -abs(x) if x > 0 else x)
+    
+    # Map category
+    result['Category'] = df['Category'].apply(standardize_category)
+    
+    # Add source file information
+    result['source_file'] = 'alliant_checking'
+    
+    return result
 
 def process_alliant_visa_format(df):
-    """
-    Process Alliant Visa transactions into standardized format.
+    """Process Alliant Visa format transactions.
     
     Args:
-        df (pd.DataFrame): DataFrame containing Alliant Visa transactions with columns:
-            - Date: Transaction date
-            - Description: Transaction description
-            - Amount: Transaction amount (with $ and commas)
-            - Balance: Account balance
-            - Post Date: Date the transaction posted
-    
+        df (pd.DataFrame): Raw transaction data
+        
     Returns:
-        pd.DataFrame: Standardized transaction data with columns:
-            - Transaction Date: Standardized date (YYYY-MM-DD)
-            - Post Date: Standardized date (YYYY-MM-DD)
-            - Description: Cleaned description
-            - Amount: Numeric amount (negative for debits)
-            - Category: Transaction category
-            - source_file: Set to 'alliant_visa'
-            
+        pd.DataFrame: Standardized transaction data
+        
     Raises:
         ValueError: If any required field is invalid or missing
     """
-    result = df.copy()
+    # Create result DataFrame with standardized columns
+    result = pd.DataFrame()
     
-    # Validate required fields
-    if 'Description' not in df.columns or df['Description'].isna().any() or (df['Description'] == '').any():
-        raise ValueError("Description is required and cannot be empty")
-        
-    if 'Date' not in df.columns:
-        raise ValueError("Missing required column: Date")
-        
-    if 'Amount' not in df.columns:
-        raise ValueError("Missing required column: Amount")
-        
-    if 'Post Date' not in df.columns:
-        raise ValueError("Missing required column: Post Date")
-        
-    # Validate amount format before cleaning
-    if not df['Amount'].apply(is_valid_amount).all():
-        raise ValueError("Invalid amount format")
+    # Map date columns
+    result['Transaction Date'] = df['Date'].apply(standardize_date)
+    result['Post Date'] = df['Post Date'].apply(standardize_date)
     
     # Validate dates
-    result['Transaction Date'] = result['Date'].apply(standardize_date)
-    result['Post Date'] = result['Post Date'].apply(standardize_date)
-    
-    if result['Transaction Date'].isna().any() or result['Post Date'].isna().any():
+    if result['Transaction Date'].isna().any():
+        raise ValueError("Invalid date format")
+    if result['Post Date'].isna().any():
         raise ValueError("Invalid date format")
         
     # Validate post date is not before transaction date
     if (pd.to_datetime(result['Post Date']) < pd.to_datetime(result['Transaction Date'])).any():
         raise ValueError("Post date cannot be before transaction date")
     
-    # Clean amount
-    print(f"Original amount: {result['Amount'].values}")
-    result['Amount'] = result['Amount'].apply(clean_amount)
-    print(f"After clean_amount: {result['Amount'].values}")
-    result['Amount'] = result['Amount'] * -1  # Convert to negative for debits
-    print(f"After negation: {result['Amount'].values}")
+    # Map description
+    result['Description'] = df['Description'].apply(standardize_description)
     
-    result['Description'] = result['Description'].str.strip()
-    result['Category'] = result.get('Category', pd.Series('', index=result.index))
-    result['source_file'] = result.get('source_file', pd.Series('alliant_visa', index=result.index))
-    return result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
+    # Convert amount to float and ensure debits are negative
+    result['Amount'] = df['Amount'].apply(clean_amount).apply(lambda x: -abs(x) if x > 0 else x)
+    
+    # Map category
+    result['Category'] = df['Category'].apply(standardize_category)
+    
+    # Add source file information
+    result['source_file'] = 'alliant_visa'
+    
+    return result
 
 def reconcile_transactions(aggregator_df, detail_records):
     """
@@ -846,73 +694,64 @@ def reconcile_transactions(aggregator_df, detail_records):
 
 def import_csv(file_path):
     """
-    Import and process a CSV file based on its format.
+    Import a CSV file and detect its format.
     
     Args:
-        file_path (str or pathlib.Path): Path to the CSV file
+        file_path (str or Path): Path to the CSV file
         
     Returns:
         pd.DataFrame: Standardized transaction data
         
     Raises:
-        ValueError: If the file format cannot be determined
+        FileNotFoundError: If the file does not exist
+        pd.errors.EmptyDataError: If the file is empty
+        ValueError: If file format cannot be detected or processed
     """
     logger.debug(f"Importing CSV file: {file_path}")
+
+    # Read CSV file
+    try:
+        df = pd.read_csv(file_path)
+    except FileNotFoundError:
+        raise  # Let FileNotFoundError pass through
+    except pd.errors.EmptyDataError:
+        raise  # Let EmptyDataError pass through
+    except Exception as e:
+        raise ValueError(f"Error reading CSV file: {str(e)}")
+
+    logger.debug(f"Columns in CSV: {df.columns}")
+
+    # Normalize column names
+    df.columns = df.columns.str.strip()
     
-    # Read the CSV file
-    df = pd.read_csv(file_path)
-    print(f"\nColumns in CSV: {df.columns.tolist()}")
-    
-    # Determine the format based on column names
-    columns = set(df.columns)
-    
-    # Discover format
-    if {'Trans. Date', 'Post Date', 'Description', 'Amount'}.issubset(columns) or \
-       {'Transaction Date', 'Post Date', 'Description', 'Amount'}.issubset(columns):
-        print("Detected Discover format")
+    # Handle both 'Trans. Date' and 'Transaction Date'
+    if 'Transaction Date' in df.columns and 'Trans. Date' not in df.columns:
+        df['Trans. Date'] = df['Transaction Date']
+
+    # Detect format based on columns
+    if all(col in df.columns for col in ['Trans. Date', 'Post Date', 'Description', 'Amount']):
+        logger.debug("Detected Discover format")
         return process_discover_format(df)
-    
-    # Capital One format
-    if {'Transaction Date', 'Posted Date', 'Description', 'Debit', 'Credit'}.issubset(columns):
-        print("Detected Capital One format")
-        return process_capital_one_format(df)
-    
-    # Chase format
-    if {'Posting Date', 'Description', 'Amount', 'Type', 'Balance', 'Check or Slip #'}.issubset(columns):
-        print("Detected Chase format")
-        return process_chase_format(df)
-    
-    # Alliant Visa format
-    if {'Date', 'Description', 'Amount', 'Balance', 'Post Date'}.issubset(columns):
-        print("Detected Alliant Visa format")
-        return process_alliant_visa_format(df)
-    
-    # Alliant Checking format
-    if {'Date', 'Description', 'Amount', 'Balance'}.issubset(columns):
-        print("Detected Alliant Checking format")
-        return process_alliant_checking_format(df)
-    
-    # Amex format
-    if {'Date', 'Description', 'Card Member', 'Account #', 'Amount'}.issubset(columns):
-        print("Detected Amex format")
+    elif all(col in df.columns for col in ['Date', 'Description', 'Card Member', 'Account #', 'Amount']):
+        logger.debug("Detected Amex format")
         return process_amex_format(df)
-    
-    # Aggregator format
-    if {'Date', 'Description', 'Amount', 'Category'}.issubset(columns):
-        print("Detected Aggregator format")
+    elif all(col in df.columns for col in ['Transaction Date', 'Posted Date', 'Card No.', 'Description', 'Category', 'Debit', 'Credit']):
+        logger.debug("Detected Capital One format")
+        return process_capital_one_format(df)
+    elif all(col in df.columns for col in ['Details', 'Posting Date', 'Description', 'Amount', 'Type', 'Balance', 'Check or Slip #']):
+        logger.debug("Detected Chase format")
+        return process_chase_format(df)
+    elif all(col in df.columns for col in ['Date', 'Description', 'Amount', 'Category', 'Post Date']):
+        logger.debug("Detected Alliant Visa format")
+        return process_alliant_visa_format(df)
+    elif all(col in df.columns for col in ['Date', 'Description', 'Amount', 'Category']):
+        logger.debug("Detected Alliant Checking format")
+        return process_alliant_checking_format(df)
+    elif all(col in df.columns for col in ['Date', 'Account', 'Description', 'Category', 'Tags', 'Amount']):
+        logger.debug("Detected Aggregator format")
         return process_aggregator_format(df)
-    
-    # Post date format
-    if {'Post Date', 'Description', 'Amount'}.issubset(columns):
-        print("Detected Post Date format")
-        return process_post_date_format(df)
-    
-    # Transaction date format
-    if {'Transaction Date', 'Description', 'Amount'}.issubset(columns):
-        print("Detected Transaction Date format")
-        return process_date_format(df)
-    
-    raise ValueError(f"Could not determine format for file: {file_path}\nColumns: {columns}")
+    else:
+        raise ValueError("Could not detect file format based on columns")
 
 def import_folder(folder_path):
     """

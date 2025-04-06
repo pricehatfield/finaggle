@@ -15,7 +15,8 @@ amex_sample_data = {
     'Description': ['AT&T UVERSE PAYMENT 8002882020 TX', 'MOBILE PAYMENT - THANK YOU'],
     'Card Member': ['PRICE L HATFIELD', 'PRICE L HATFIELD'],
     'Account #': ['-42004', '-42004'],
-    'Amount': ['126.12', '-250.91']  # Positive for debits, negative for credits
+    'Amount': ['126.12', '-250.91'],  # Positive for debits, negative for credits
+    'Category': ['Telephone', 'Payment']  # Added Category column
 }
 
 capital_one_sample_data = {
@@ -42,7 +43,8 @@ alliant_checking_sample_data = {
     'Date': ['01/01/2025'],
     'Description': ['Test Transaction'],
     'Amount': ['-50.00'],  # Negative for debits
-    'Balance': ['1000.00']
+    'Balance': ['1000.00'],
+    'Category': ['Shopping']
 }
 
 alliant_visa_sample_data = {
@@ -50,7 +52,8 @@ alliant_visa_sample_data = {
     'Description': ['Test Transaction'],
     'Amount': ['50.00'],  # Positive for debits
     'Balance': ['1000.00'],
-    'Post Date': ['01/02/2025']
+    'Post Date': ['01/02/2025'],
+    'Category': ['Shopping']
 }
 
 empower_sample_data = {
