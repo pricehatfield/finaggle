@@ -1,8 +1,73 @@
 import pytest
 import pandas as pd
+import numpy as np
 import os
+import re
 from pathlib import Path
-from src.reconcile import import_csv, ensure_directory
+from src.reconcile import (
+    import_csv,
+    import_folder,
+    setup_logging,
+    create_output_directories
+)
+
+@pytest.mark.dependency(depends=["test_3_file_formats.py"])
+def test_logging_setup(tmp_path):
+    """Test logging setup"""
+    log_dir = tmp_path / "logs"
+    setup_logging(log_dir)
+    assert os.path.exists(log_dir)
+    assert os.path.exists(log_dir / "reconciliation.log")
+
+@pytest.mark.dependency(depends=["test_3_file_formats.py"])
+def test_directory_creation(tmp_path):
+    """Test directory creation"""
+    output_dir = tmp_path / "output"
+    create_output_directories(output_dir)
+    assert os.path.exists(output_dir)
+    assert os.path.exists(output_dir / "reconciled")
+    assert os.path.exists(output_dir / "unmatched")
+
+@pytest.mark.dependency(depends=["test_3_file_formats.py"])
+def test_csv_import(tmp_path):
+    """Test CSV import functionality"""
+    # Create test CSV
+    df = pd.DataFrame({
+        'Transaction Date': ['2025-01-01'],
+        'Post Date': ['2025-01-02'],
+        'Description': ['Test Transaction'],
+        'Amount': ['-50.00'],
+        'Category': ['Shopping']
+    })
+    file_path = tmp_path / "test.csv"
+    df.to_csv(file_path, index=False)
+    
+    # Import and validate
+    result = import_csv(file_path)
+    assert not result.empty
+    assert set(result.columns) == set(df.columns)
+
+@pytest.mark.dependency(depends=["test_3_file_formats.py"])
+def test_folder_import(tmp_path):
+    """Test folder import functionality"""
+    # Create test files
+    formats = ['discover', 'capital_one', 'chase']
+    for format_name in formats:
+        df = pd.DataFrame({
+            'Transaction Date': ['2025-01-01'],
+            'Post Date': ['2025-01-02'],
+            'Description': [f'Test {format_name} Transaction'],
+            'Amount': ['-50.00'],
+            'Category': ['Shopping']
+        })
+        file_path = tmp_path / f"{format_name}_test.csv"
+        df.to_csv(file_path, index=False)
+    
+    # Import folder and validate
+    result = import_folder(tmp_path)
+    assert not result.empty
+    assert len(result) == len(formats)
+    assert all(format_name in result['source_file'].values for format_name in formats)
 
 class TestDataLoading:
     """Test suite for data loading functionality"""

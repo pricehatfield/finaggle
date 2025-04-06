@@ -256,7 +256,7 @@ def process_capital_one_format(df):
             - Transaction Date: Standardized date (YYYY-MM-DD)
             - Post Date: Standardized date (YYYY-MM-DD)
             - Description: Cleaned description
-            - Amount: Numeric amount (negative for debits, positive for credits)
+            - Amount: Numeric amount (negative for debits)
             - Category: Transaction category
             - source_file: Set to 'capital_one'
     """
@@ -264,44 +264,15 @@ def process_capital_one_format(df):
     result['Transaction Date'] = result['Transaction Date'].apply(standardize_date)
     result['Post Date'] = result['Posted Date'].apply(standardize_date)
     
-    # Handle debit/credit columns
-    debit = result['Debit'].apply(clean_amount).fillna(0)
-    credit = result['Credit'].apply(clean_amount).fillna(0)
-    result['Amount'] = credit - debit  # Debits are already negative
+    # Combine Debit and Credit columns
+    result['Amount'] = result.apply(
+        lambda row: -clean_amount(row['Debit']) if row['Debit'] else clean_amount(row['Credit']),
+        axis=1
+    )
     
     result['Description'] = result['Description'].str.strip()
     result['Category'] = result.get('Category', pd.Series('', index=result.index))
     result['source_file'] = result.get('source_file', pd.Series('capital_one', index=result.index))
-    return result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
-
-def process_alliant_format(df):
-    """
-    Process Alliant credit union transactions into standardized format.
-    
-    Args:
-        df (pd.DataFrame): DataFrame containing Alliant transactions with columns:
-            - Transaction Date: Date of the transaction
-            - Post Date: Date the transaction posted
-            - Description: Transaction description
-            - Amount: Transaction amount (with $ and commas)
-            - Category: Transaction category (optional)
-    
-    Returns:
-        pd.DataFrame: Standardized transaction data with columns:
-            - Transaction Date: Standardized date (YYYY-MM-DD)
-            - Post Date: Standardized date (YYYY-MM-DD)
-            - Description: Cleaned description
-            - Amount: Numeric amount (negative for debits)
-            - Category: Transaction category
-            - source_file: Set to 'alliant'
-    """
-    result = df.copy()
-    result['Transaction Date'] = result['Transaction Date'].apply(standardize_date)
-    result['Post Date'] = result['Post Date'].apply(standardize_date)
-    result['Amount'] = result['Amount'].apply(clean_amount) * -1  # Convert to negative for debits
-    result['Description'] = result['Description'].str.strip()
-    result['Category'] = result.get('Category', pd.Series('', index=result.index))
-    result['source_file'] = result.get('source_file', pd.Series('alliant', index=result.index))
     return result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
 
 def process_chase_format(df):
@@ -310,11 +281,13 @@ def process_chase_format(df):
     
     Args:
         df (pd.DataFrame): DataFrame containing Chase transactions with columns:
-            - Transaction Date: Date of the transaction
-            - Post Date: Date the transaction posted
+            - Details: Transaction type
+            - Posting Date: Date the transaction posted
             - Description: Transaction description
             - Amount: Transaction amount (negative for debits)
-            - Category: Transaction category (optional)
+            - Type: Transaction type
+            - Balance: Account balance
+            - Check or Slip #: Check number
     
     Returns:
         pd.DataFrame: Standardized transaction data with columns:
@@ -326,9 +299,9 @@ def process_chase_format(df):
             - source_file: Set to 'chase'
     """
     result = df.copy()
-    result['Transaction Date'] = result['Transaction Date'].apply(standardize_date)
-    result['Post Date'] = result['Post Date'].apply(standardize_date)
-    result['Amount'] = result['Amount'].apply(clean_amount)  # Chase amounts are already negative for debits
+    result['Transaction Date'] = result['Posting Date'].apply(standardize_date)  # Chase only provides posting date
+    result['Post Date'] = result['Posting Date'].apply(standardize_date)
+    result['Amount'] = result['Amount'].apply(clean_amount)  # Chase already uses negative for debits
     result['Description'] = result['Description'].str.strip()
     result['Category'] = result.get('Category', pd.Series('', index=result.index))
     result['source_file'] = result.get('source_file', pd.Series('chase', index=result.index))
@@ -711,6 +684,57 @@ def export_reconciliation(results_df, output_path):
     except Exception as e:
         logger.error(f"Error exporting results: {str(e)}")
         raise
+
+def generate_reconciliation_report(reconciliation_results):
+    """Generate a reconciliation report from the reconciliation results.
+    
+    Args:
+        reconciliation_results (dict): Dictionary containing:
+            - matched: DataFrame of matched transactions
+            - unmatched_detail: DataFrame of unmatched detail transactions
+            - unmatched_aggregator: DataFrame of unmatched aggregator transactions
+            
+    Returns:
+        dict: Report containing:
+            - summary: Dictionary of summary statistics
+            - matched_list: List of matched transactions
+            - unmatched_detail_list: List of unmatched detail transactions
+            - unmatched_aggregator_list: List of unmatched aggregator transactions
+            - timestamp: Report generation timestamp
+    """
+    # Calculate summary statistics
+    total_transactions = len(reconciliation_results['matched']) + \
+                        len(reconciliation_results['unmatched_detail']) + \
+                        len(reconciliation_results['unmatched_aggregator'])
+    matched_transactions = len(reconciliation_results['matched'])
+    unmatched_detail = len(reconciliation_results['unmatched_detail'])
+    unmatched_aggregator = len(reconciliation_results['unmatched_aggregator'])
+    match_rate = matched_transactions / total_transactions if total_transactions > 0 else 0.0
+    
+    # Create summary
+    summary = {
+        'total_transactions': total_transactions,
+        'matched_transactions': matched_transactions,
+        'unmatched_detail': unmatched_detail,
+        'unmatched_aggregator': unmatched_aggregator,
+        'match_rate': match_rate
+    }
+    
+    # Convert DataFrames to lists of dictionaries
+    matched_list = reconciliation_results['matched'].to_dict('records')
+    unmatched_detail_list = reconciliation_results['unmatched_detail'].to_dict('records')
+    unmatched_aggregator_list = reconciliation_results['unmatched_aggregator'].to_dict('records')
+    
+    # Create report
+    report = {
+        'summary': summary,
+        'matched_list': matched_list,
+        'unmatched_detail_list': unmatched_detail_list,
+        'unmatched_aggregator_list': unmatched_aggregator_list,
+        'timestamp': pd.Timestamp.now().isoformat()
+    }
+    
+    return report
 
 def main():
     """
