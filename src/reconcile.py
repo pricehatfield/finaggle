@@ -105,21 +105,24 @@ def process_discover_format(df):
     
     # Clean and standardize amounts
     result['Amount'] = result['Amount'].apply(clean_amount)
-    # Discover shows positive amounts for debits, so we invert them
+    # Discover shows positive amounts for debits, so we negate them
     result['Amount'] = -result['Amount']
     
     # Standardize description
     result['Description'] = result['Description'].str.upper()
     
-    # Add source_file
-    result['source_file'] = 'discover'
+    # Add source_file if not present
+    if 'source_file' not in result.columns:
+        result['source_file'] = 'discover'
     
-    # Add Category if not present
+    # Keep original Category if present, otherwise add empty
     if 'Category' not in result.columns:
         result['Category'] = ''
     
-    # Select and rename columns
-    result = result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
+    # Keep all original columns plus our standardized ones
+    standard_cols = ['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']
+    all_cols = list(dict.fromkeys(standard_cols + list(df.columns)))  # Remove duplicates while preserving order
+    result = result[all_cols]
     
     logger.debug(f"Processed {len(result)} Discover records")
     return result
@@ -135,18 +138,25 @@ def process_amex_format(df):
     
     # Clean and standardize amounts
     result['Amount'] = result['Amount'].apply(clean_amount)
-    # Amex shows positive amounts for debits and negative for credits, so we invert all amounts
+    # Amex shows positive amounts for debits and negative for credits
+    # We need to negate all amounts to match our standard
     result['Amount'] = -result['Amount']
     
     # Standardize description
     result['Description'] = result['Description'].str.upper()
     
-    # Add source_file and Category
-    result['source_file'] = 'amex'
-    result['Category'] = ''  # Amex doesn't provide categories
+    # Add source_file if not present
+    if 'source_file' not in result.columns:
+        result['source_file'] = 'amex'
     
-    # Select and rename columns
-    result = result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
+    # Keep original Category if present, otherwise add empty
+    if 'Category' not in result.columns:
+        result['Category'] = ''
+    
+    # Keep all original columns plus our standardized ones
+    standard_cols = ['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']
+    all_cols = list(dict.fromkeys(standard_cols + list(df.columns)))  # Remove duplicates while preserving order
+    result = result[all_cols]
     
     logger.debug(f"Processed {len(result)} Amex records")
     return result
@@ -163,18 +173,24 @@ def process_capital_one_format(df):
     # Handle separate Debit/Credit columns
     result['Debit'] = result['Debit'].fillna('0').apply(clean_amount)
     result['Credit'] = result['Credit'].fillna('0').apply(clean_amount)
-    result['Amount'] = -result['Debit'] + result['Credit']  # Negate debits, keep credits positive
+    # Debits become negative, credits stay positive
+    result['Amount'] = -result['Debit'] + result['Credit']
     
     # Standardize description
     result['Description'] = result['Description'].str.upper()
     
-    # Add source_file and Category
-    result['source_file'] = 'capital_one'
+    # Add source_file if not present
+    if 'source_file' not in result.columns:
+        result['source_file'] = 'capital_one'
+    
+    # Keep original Category if present, otherwise add empty
     if 'Category' not in result.columns:
         result['Category'] = ''
     
-    # Select and rename columns
-    result = result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
+    # Keep all original columns plus our standardized ones
+    standard_cols = ['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']
+    all_cols = list(dict.fromkeys(standard_cols + list(df.columns)))  # Remove duplicates while preserving order
+    result = result[all_cols]
     
     logger.debug(f"Processed {len(result)} Capital One records")
     return result
@@ -190,19 +206,24 @@ def process_alliant_format(df):
     
     # Clean and standardize amounts (remove $ symbol and convert to float)
     result['Amount'] = result['Amount'].str.replace('$', '').apply(clean_amount)
-    # Alliant shows positive amounts with $ symbol, so we invert them
+    # Alliant shows positive amounts for debits, so we negate them
     result['Amount'] = -result['Amount']
     
     # Standardize description
     result['Description'] = result['Description'].str.upper()
     
-    # Add source_file and Category
-    result['source_file'] = 'alliant'
+    # Add source_file if not present
+    if 'source_file' not in result.columns:
+        result['source_file'] = 'alliant'
+    
+    # Keep original Category if present, otherwise add empty
     if 'Category' not in result.columns:
         result['Category'] = ''
     
-    # Select and rename columns
-    result = result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
+    # Keep all original columns plus our standardized ones
+    standard_cols = ['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']
+    all_cols = list(dict.fromkeys(standard_cols + list(df.columns)))  # Remove duplicates while preserving order
+    result = result[all_cols]
     
     logger.debug(f"Processed {len(result)} Alliant records")
     return result
@@ -218,19 +239,23 @@ def process_chase_format(df):
     
     # Clean and standardize amounts
     result['Amount'] = result['Amount'].apply(clean_amount)
-    # Chase shows positive amounts for debits, so we invert them
-    result['Amount'] = -result['Amount']
+    # Chase already shows negative amounts for debits, so no need to invert
     
     # Standardize description
     result['Description'] = result['Description'].str.upper()
     
-    # Add source_file and Category
-    result['source_file'] = 'chase'
+    # Add source_file if not present
+    if 'source_file' not in result.columns:
+        result['source_file'] = 'chase'
+    
+    # Keep original Category if present, otherwise add empty
     if 'Category' not in result.columns:
         result['Category'] = ''
     
-    # Select and rename columns
-    result = result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
+    # Keep all original columns plus our standardized ones
+    standard_cols = ['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']
+    all_cols = list(dict.fromkeys(standard_cols + list(df.columns)))  # Remove duplicates while preserving order
+    result = result[all_cols]
     
     logger.debug(f"Processed {len(result)} Chase records")
     return result
@@ -246,18 +271,23 @@ def process_aggregator_format(df):
     
     # Clean and standardize amounts
     result['Amount'] = result['Amount'].apply(clean_amount)
+    # Aggregator already shows negative amounts for debits, so no need to invert
     
     # Standardize description
     result['Description'] = result['Description'].str.upper()
     
-    # Add source_file
-    result['source_file'] = 'aggregator'
+    # Add source_file if not present
+    if 'source_file' not in result.columns:
+        result['source_file'] = 'aggregator'
     
-    # Keep Category from input
-    result['Category'] = df['Category']
+    # Keep original Category if present, otherwise add empty
+    if 'Category' not in result.columns:
+        result['Category'] = ''
     
-    # Select and rename columns
-    result = result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
+    # Keep all original columns plus our standardized ones
+    standard_cols = ['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']
+    all_cols = list(dict.fromkeys(standard_cols + list(df.columns)))  # Remove duplicates while preserving order
+    result = result[all_cols]
     
     logger.debug(f"Processed {len(result)} aggregator records")
     return result
@@ -357,12 +387,12 @@ def reconcile_transactions(aggregator_df, detail_dfs):
         result = pd.concat([result, pd.DataFrame({
             'Date': matched['Post Date'],
             'YearMonth': matched['Post Date'].str[:7],
-            'Account': '',
+            'Account': matched['Account'],  # Use aggregator's account
             'Description': matched['Description'],
-            'Category': matched['Category_agg'],  # Use aggregator's category
-            'Tags': '',
+            'Category': matched['Category'],  # Use aggregator's category
+            'Tags': matched['Tags'],  # Use aggregator's tags
             'Amount': matched['Amount'],
-            'reconciled_key': 'P:' + matched['source_file_detail'],  # Use detail's source_file
+            'reconciled_key': 'P:' + matched['Post Date'] + '_' + matched['Amount'].astype(str),
             'Matched': True
         })], ignore_index=True)
     
@@ -372,12 +402,12 @@ def reconcile_transactions(aggregator_df, detail_dfs):
         result = pd.concat([result, pd.DataFrame({
             'Date': unmatched_detail['Post Date'],
             'YearMonth': unmatched_detail['Post Date'].str[:7],
-            'Account': '',
+            'Account': '',  # Empty for unmatched detail records
             'Description': unmatched_detail['Description'],
-            'Category': unmatched_detail['Category_detail'],  # Use detail's category
-            'Tags': '',
+            'Category': '',  # Empty for unmatched detail records
+            'Tags': '',  # Empty for unmatched detail records
             'Amount': unmatched_detail['Amount'],
-            'reconciled_key': 'D:' + unmatched_detail['source_file_detail'],  # Use detail's source_file
+            'reconciled_key': 'D:' + unmatched_detail['Post Date'] + '_' + unmatched_detail['Amount'].astype(str),
             'Matched': False
         })], ignore_index=True)
     
@@ -387,12 +417,12 @@ def reconcile_transactions(aggregator_df, detail_dfs):
         result = pd.concat([result, pd.DataFrame({
             'Date': unmatched_agg['Post Date'],
             'YearMonth': unmatched_agg['Post Date'].str[:7],
-            'Account': '',
+            'Account': unmatched_agg['Account'],  # Preserve aggregator's account
             'Description': unmatched_agg['Description'],
-            'Category': unmatched_agg['Category_agg'],  # Use aggregator's category
-            'Tags': '',
+            'Category': unmatched_agg['Category'],  # Preserve aggregator's category
+            'Tags': unmatched_agg['Tags'],  # Preserve aggregator's tags
             'Amount': unmatched_agg['Amount'],
-            'reconciled_key': 'U:' + unmatched_agg['source_file_agg'],  # Use aggregator's source_file
+            'reconciled_key': 'U:' + unmatched_agg['Post Date'] + '_' + unmatched_agg['Amount'].astype(str),
             'Matched': False
         })], ignore_index=True)
     
@@ -401,49 +431,68 @@ def reconcile_transactions(aggregator_df, detail_dfs):
     
     return result
 
-def import_csv(filepath):
-    """Import a CSV file and return a processed DataFrame"""
-    logger.debug(f"import_csv called with filepath: {filepath}")
+def import_csv(file_path):
+    """
+    Import a CSV file and return a pandas DataFrame.
+    
+    Args:
+        file_path (str): Path to the CSV file
+        
+    Returns:
+        pd.DataFrame: DataFrame containing the CSV data
+        
+    Raises:
+        FileNotFoundError: If the file doesn't exist
+        pd.errors.EmptyDataError: If the file is empty
+        pd.errors.ParserError: If the file is malformed
+    """
+    logger.debug(f"Importing CSV file: {file_path}")
+    
+    # Check if file exists
+    if not os.path.exists(file_path):
+        logger.error(f"File not found: {file_path}")
+        raise FileNotFoundError(f"File not found: {file_path}")
+    
+    # Check if file is empty
+    if os.path.getsize(file_path) == 0:
+        logger.error(f"Empty file: {file_path}")
+        raise pd.errors.EmptyDataError(f"Empty file: {file_path}")
+    
     try:
-        # Read CSV without automatic date parsing and handle quoted strings
-        df = pd.read_csv(
-            filepath,
-            parse_dates=False,
-            dtype=str,  # Read all columns as strings initially
-            na_values=['nan', 'NaN', ''],
-            keep_default_na=True,
-            quoting=csv.QUOTE_MINIMAL
-        )
-        columns = set(df.columns)
+        # Read CSV with proper error handling
+        df = pd.read_csv(file_path)
         
-        # Add source_file column first
-        df['source_file'] = os.path.basename(filepath)
+        # Validate DataFrame is not empty
+        if df.empty:
+            logger.error(f"CSV file contains no data: {file_path}")
+            raise pd.errors.EmptyDataError(f"CSV file contains no data: {file_path}")
         
-        processed_df = None
-        if {'Trans. Date', 'Post Date', 'Description', 'Amount', 'Category'} <= columns:  # Discover format
-            processed_df = process_discover_format(df)  # Discover format
-        elif {'Details', 'Posting Date', 'Description', 'Amount', 'Type', 'Balance'}.issubset(columns):  # Chase format
-            # For Chase format, we need to handle the Description column specially
-            df['Description'] = df['Description'].fillna('')
-            processed_df = process_chase_format(df)  # Chase format
-        elif {'Date', 'Description', 'Card Member', 'Account #', 'Amount'} <= columns:  # Amex format
-            processed_df = process_amex_format(df)  # Amex format
-        elif {'Transaction Date', 'Posted Date', 'Description', 'Debit', 'Credit'} <= columns:  # Capital One format
-            processed_df = process_capital_one_format(df)  # Capital One format
-        elif {'Date', 'Description', 'Amount', 'Balance', 'Post Date'} <= columns:  # Alliant format
-            processed_df = process_alliant_format(df)  # Alliant format
-        elif {'Date', 'Description', 'Amount', 'Category', 'Tags', 'Account'} <= columns:  # Aggregator format
-            processed_df = process_aggregator_format(df)  # Aggregator format
-        
-        if processed_df is not None:
-            # Ensure source_file is preserved
-            processed_df['source_file'] = df['source_file']
+        # Detect format based on columns
+        if 'Trans. Date' in df.columns:
+            result = process_discover_format(df)
+        elif 'Card Member' in df.columns:
+            result = process_amex_format(df)
+        elif 'Debit' in df.columns and 'Credit' in df.columns:
+            result = process_capital_one_format(df)
+        elif 'Balance' in df.columns and '$' in str(df['Amount'].iloc[0]):
+            result = process_alliant_format(df)
+        elif 'Check or Slip #' in df.columns:
+            result = process_chase_format(df)
+        elif 'Tags' in df.columns and 'Account' in df.columns:
+            result = process_aggregator_format(df)
+        else:
+            logger.error(f"Unknown file format: {file_path}")
+            raise ValueError(f"Unknown file format: {file_path}")
             
-        logger.debug(f"Columns found in file: {columns}")
-        return processed_df
+        logger.debug(f"Successfully imported {len(result)} rows from {file_path}")
+        return result
+        
+    except pd.errors.ParserError as e:
+        logger.error(f"Error parsing CSV file {file_path}: {str(e)}")
+        raise
     except Exception as e:
-        logger.error(f"Error processing {filepath}: {str(e)}")
-        return None
+        logger.error(f"Unexpected error importing CSV file {file_path}: {str(e)}")
+        raise
 
 def import_folder(folder_path):
     """
@@ -544,6 +593,46 @@ def main(aggregator_path, details_folder, log_level=logging.ERROR):
     except Exception as e:
         logger.error(f"Error in main function: {str(e)}")
         return
+
+def generate_reconciliation_report(result):
+    """
+    Generate a reconciliation report from the reconciliation results.
+    
+    Args:
+        result (dict): Dictionary containing matched and unmatched transactions
+        
+    Returns:
+        dict: Report containing summary statistics and transaction lists
+    """
+    logger.debug("Generating reconciliation report")
+    
+    # Calculate summary statistics
+    total_transactions = len(result['matched']) + len(result['unmatched_detail']) + len(result['unmatched_aggregator'])
+    matched_transactions = len(result['matched'])
+    unmatched_detail = len(result['unmatched_detail'])
+    unmatched_aggregator = len(result['unmatched_aggregator'])
+    match_rate = matched_transactions / total_transactions if total_transactions > 0 else 0.0
+    
+    # Create summary
+    summary = {
+        'total_transactions': total_transactions,
+        'matched_transactions': matched_transactions,
+        'unmatched_detail': unmatched_detail,
+        'unmatched_aggregator': unmatched_aggregator,
+        'match_rate': match_rate
+    }
+    
+    # Create report
+    report = {
+        'summary': summary,
+        'matched_list': result['matched'].to_dict('records'),
+        'unmatched_detail_list': result['unmatched_detail'].to_dict('records'),
+        'unmatched_aggregator_list': result['unmatched_aggregator'].to_dict('records'),
+        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    
+    logger.debug(f"Generated report with {total_transactions} total transactions")
+    return report
 
 if __name__ == "__main__":
     import sys

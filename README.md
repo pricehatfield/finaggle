@@ -42,14 +42,123 @@ pip install -e .
 pip install -r requirements.txt
 ```
 
-## Overview
+## Program Flow and Debugging Guide
 
-The reconciliation process follows these steps:
-1. Read and validate input files
-2. Standardize detail records to a common format
-3. Standardize aggregator records to a common format
-4. Match transactions between detail and aggregator records
-5. Generate a reconciliation report showing matched and unmatched transactions
+### High-Level Flow
+1. **Input Validation**
+   - Check file existence and permissions
+   - Validate file formats and required columns
+   - Log validation results at DEBUG level
+
+2. **Data Loading**
+   - Import CSV files using pandas
+   - Auto-detect file formats based on columns
+   - Handle empty files and malformed data
+   - Log file processing at DEBUG level
+
+3. **Data Standardization**
+   - Convert dates to YYYY-MM-DD format
+   - Standardize amounts (negative for debits, positive for credits)
+   - Clean descriptions (uppercase, remove special chars)
+   - Log transformations at DEBUG level
+
+4. **Reconciliation**
+   - Match transactions using post dates and amounts
+   - Handle partial matches and near-matches
+   - Generate reconciliation keys
+   - Log matching process at DEBUG level
+
+5. **Report Generation**
+   - Create Excel report with matched/unmatched transactions
+   - Calculate summary statistics
+   - Archive results
+   - Log report creation at INFO level
+
+### Logging Levels
+- **DEBUG**: Detailed information for troubleshooting
+  - File processing steps
+  - Data transformations
+  - Matching logic
+  - Performance metrics
+
+- **INFO**: General progress information
+  - File import success
+  - Record counts
+  - Report generation
+
+- **WARNING**: Issues that don't stop processing
+  - Missing optional columns
+  - Unusual data patterns
+  - Performance concerns
+
+- **ERROR**: Issues that prevent processing
+  - Missing required columns
+  - File access problems
+  - Data format errors
+
+### Common Issues and Solutions
+
+1. **File Format Detection**
+   - Issue: Unknown file format error
+   - Check: Required columns for each format
+   - Debug: Set logging to DEBUG and check column detection
+
+2. **Date Standardization**
+   - Issue: None/NaT dates
+   - Check: Input date formats in CSV
+   - Debug: Review standardize_date function logs
+
+3. **Amount Processing**
+   - Issue: Incorrect debit/credit signs
+   - Check: Institution-specific amount formats
+   - Debug: Enable DEBUG logging for amount processing
+
+4. **Matching Issues**
+   - Issue: Low match rates
+   - Check: Date alignment between sources
+   - Debug: Review reconciliation logs for match attempts
+
+### Troubleshooting Steps
+
+1. **Enable Detailed Logging**
+   ```bash
+   python -m reconcile aggregator.csv details/ --log-level DEBUG
+   ```
+
+2. **Validate Input Files**
+   - Check file encoding (UTF-8 preferred)
+   - Verify column names match expected format
+   - Ensure no BOM markers or hidden characters
+
+3. **Check Intermediate Data**
+   - Review logs/reconciliation_*.log files
+   - Examine standardized data format
+   - Verify amount sign conventions
+
+4. **Test Format Processing**
+   ```bash
+   python -m pytest tests/test_file_formats.py -v
+   ```
+
+5. **Verify Reconciliation Logic**
+   ```bash
+   python -m pytest tests/test_reconcile.py -v
+   ```
+
+### Error Handling
+
+The program implements robust error handling:
+1. File-level validation
+2. Data format checking
+3. Column presence verification
+4. Data type validation
+5. Graceful error recovery
+
+Each error is:
+- Logged appropriately
+- Includes context information
+- Suggests potential fixes
+- Preserves data integrity
 
 ## Data Flow
 

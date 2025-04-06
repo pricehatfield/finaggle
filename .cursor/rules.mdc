@@ -1,0 +1,96 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+ # Project Rules and Guidelines
+
+## Tool Usage Rules
+
+1. **Test Execution**
+   - Store pytest reports under the logs directory
+   - Never run `python -m pytest tests/ -v` or similar commands that might get stuck
+   - Instead, run specific test files: `python -m pytest tests/test_file_formats.py -v`
+   - Run tests in smaller batches when possible
+   - If a test command gets stuck, use Ctrl+C to interrupt and try a more targeted approach
+
+2. **Command Execution**
+   - Avoid commands that require additional user input
+   - Use `| cat` for commands that might use a pager (git, less, head, tail, more)
+   - For long-running commands, set `is_background=True` when appropriate
+   - Always require user approval for commands unless they are safe and match user requirements
+
+3. **File Operations**
+   - Always use relative paths in the workspace
+   - Document any file structure changes in the README
+   - Keep data and logs directories at the root level
+   - Source code should be in appropriate subdirectories (src/, tests/)
+
+4. **Code Changes**
+   - Read file contents before making changes
+   - Ensure all necessary imports are included
+   - Add appropriate logging statements
+   - Follow existing code style and patterns
+   - Document significant changes in commit messages
+
+5. **Error Handling**
+   - Log errors with appropriate context
+   - Handle edge cases gracefully
+   - Provide clear error messages
+   - Use try/except blocks where appropriate
+
+6. **Testing**
+   - Write tests for new functionality
+   - Maintain test data consistency
+   - Update tests when changing functionality
+   - Run tests in isolation when debugging
+
+7. **Documentation**
+   - Keep README up to date
+   - Document API changes
+   - Include usage examples
+   - Maintain clear commit messages
+
+## Project Structure
+
+```
+local_reconcile/
+├── data/           # Data files (not source code)
+├── logs/           # Log files (not source code)
+├── src/            # Source code
+├── tests/          # Test files
+├── README.md       # Project documentation
+└── RULES.md        # This file
+```
+
+## Best Practices
+
+1. **Code Organization**
+   - Keep related functionality together
+   - Use clear, descriptive names
+   - Follow Python naming conventions
+   - Maintain consistent formatting
+
+2. **Error Handling**
+   - Use specific exception types
+   - Provide helpful error messages
+   - Log errors with context
+   - Handle edge cases gracefully
+
+3. **Testing**
+   - Write unit tests for core functionality
+   - Include integration tests where appropriate
+   - Maintain test data separately
+   - Keep tests focused and isolated
+
+4. **Documentation**
+   - Document public APIs
+   - Include usage examples
+   - Keep documentation up to date
+   - Use clear, concise language
+
+5. **Version Control**
+   - Make atomic commits
+   - Write clear commit messages
+   - Keep commits focused
+   - Review changes before committing 
