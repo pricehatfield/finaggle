@@ -52,17 +52,36 @@ A Python package for reconciling financial transactions across multiple sources.
   - `Balance`: Decimal
   - `Post Date`: MM/DD/YYYY
 
+### American Express
+- **File Pattern**: `amex_*.csv`
+- **Columns**:
+  - `Date`: MM/DD/YYYY
+  - `Description`: String
+  - `Card Member`: String
+  - `Account #`: String
+  - `Amount`: Decimal (positive for debits, negative for credits)
+
+### Aggregator (Empower)
+- **File Pattern**: `empower_*.csv`
+- **Columns**:
+  - `Date`: YYYY-MM-DD
+  - `Account`: String
+  - `Description`: String
+  - `Category`: String
+  - `Tags`: String
+  - `Amount`: Decimal (negative for debits, positive for credits)
+
 ## Test Structure
 
 The test suite is organized into seven sequentially numbered files that follow a progressive testing path:
 
-1. `test_1_conftest.py`: Base fixtures and configuration
-2. `test_2_utils.py`: Utility functions (date standardization, amount cleaning)
-3. `test_3_file_formats.py`: File format validation and processing
-4. `test_4_file_loads.py`: File and folder import functionality
-5. `test_5_format_standardization.py`: Data standardization (descriptions, categories)
-6. `test_6_reconciliation.py`: Transaction matching and reconciliation
-7. `test_7_reporting.py`: Report generation and output
+1. `conftest.py`: Base fixtures and configuration
+2. `test_1_utils.py`: Utility functions (date standardization, amount cleaning)
+3. `test_2_file_formats.py`: File format validation and processing
+4. `test_3_file_loads.py`: File and folder import functionality
+5. `test_4_format_standardization.py`: Data standardization (descriptions, categories)
+6. `test_5_reconciliation.py`: Transaction matching and reconciliation
+7. `test_6_reporting.py`: Report generation and output
 
 Note: The numbering is for human readability and organization. Test execution order is enforced using pytest dependency markers.
 
@@ -100,13 +119,13 @@ pytest
 
 Tests are organized in numbered files for human readability and use pytest dependency markers to enforce execution order:
 
-1. `test_1_conftest.py`: Test fixtures and shared resources
-2. `test_2_utils.py`: Utility function tests (date formatting, amount cleaning)
-3. `test_3_file_formats.py`: File format validation (column names, data types)
-4. `test_4_file_loads.py`: File reading and parsing tests
-5. `test_5_format_standardization.py`: Format conversion and standardization
-6. `test_6_reconciliation.py`: Transaction matching and reconciliation
-7. `test_7_reporting.py`: Report generation and formatting
+1. `conftest.py`: Test fixtures and shared resources
+2. `test_1_utils.py`: Utility function tests (date formatting, amount cleaning)
+3. `test_2_file_formats.py`: File format validation (column names, data types)
+4. `test_3_file_loads.py`: File reading and parsing tests
+5. `test_4_format_standardization.py`: Format conversion and standardization
+6. `test_5_reconciliation.py`: Transaction matching and reconciliation
+7. `test_6_reporting.py`: Report generation and formatting
 
 Each test file builds on the previous ones, with dependency markers ensuring proper execution order. The numbered filenames make it easy to navigate the test suite and understand the progression of tests.
 
