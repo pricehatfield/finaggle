@@ -1,676 +1,152 @@
-# Transaction Reconciliation Tool
+# Transaction Reconciliation System
 
-This tool reconciles transaction records from various financial institutions (detail records) against a consolidated record (aggregator record).
+A Python-based system for reconciling financial transactions across multiple sources and formats.
 
-## Project Structure
-```
-local_reconcile/
-├── src/
-│   └── reconcile.py
-├── tests/
-│   ├── test_functions.py
-│   ├── test_file_formats.py
-│   └── test_reconcile.py
-├── data/              # Data files directory
-├── logs/              # Log files directory
-├── setup.py
-├── requirements.txt
-└── README.md
-```
+## Overview
+
+This system standardizes transaction data from various financial institutions into a common format for reconciliation purposes. It supports multiple input formats and provides a standardized output format that makes it easy to match transactions across different sources.
+
+## Supported Formats
+
+The system currently supports the following input formats:
+
+1. **Discover Format**
+   - Trans. Date: Transaction date
+   - Post Date: Posting date
+   - Description: Transaction description
+   - Amount: Transaction amount (positive for debits)
+   - Category: Transaction category
+
+2. **American Express Format**
+   - Date: Transaction date
+   - Description: Transaction description
+   - Card Member: Card member name
+   - Account #: Account number
+   - Amount: Transaction amount (positive for debits)
+
+3. **Capital One Format**
+   - Transaction Date: Transaction date
+   - Posted Date: Posting date
+   - Card No.: Card number
+   - Description: Transaction description
+   - Category: Transaction category
+   - Debit: Debit amount
+   - Credit: Credit amount
+
+4. **Alliant Format**
+   - Date: Transaction date
+   - Description: Transaction description
+   - Amount: Transaction amount (with $ prefix)
+   - Balance: Account balance
+   - Post Date: Posting date
+
+5. **Chase Format**
+   - Details: Transaction type
+   - Posting Date: Posting date
+   - Description: Transaction description
+   - Amount: Transaction amount (negative for debits)
+   - Type: Transaction type
+   - Balance: Account balance
+   - Check or Slip #: Check number
+
+6. **Aggregator Format**
+   - Date: Transaction date
+   - Description: Transaction description
+   - Amount: Transaction amount (negative for debits)
+   - Category: Transaction category
+   - Tags: Additional tags
+   - Account: Account name
+
+## Standardized Output Format
+
+All input formats are converted to a common output format with the following columns:
+
+- **Transaction Date**: Date of the transaction (YYYY-MM-DD)
+- **Post Date**: Date the transaction posted (YYYY-MM-DD)
+- **Description**: Cleaned transaction description
+- **Amount**: Standardized amount (negative for debits, positive for credits)
+- **Category**: Transaction category
+- **source_file**: Origin of the transaction
+
+## Reconciliation Process
+
+The system uses a sophisticated matching algorithm that:
+
+1. Standardizes all input formats to the common output format
+2. Creates reconciliation keys for matching:
+   - P: prefix for Post Date matches (from aggregator)
+   - T: prefix for Transaction Date matches (from detail records)
+   - UA: prefix for unmatched aggregator records
+   - UD: prefix for unmatched detail records
+3. Matches transactions based on both Post Date and Transaction Date
+4. Preserves metadata from the aggregator for matched records
+5. Includes both unmatched aggregator and detail records in the output
 
 ## Installation
 
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd local_reconcile
-```
-
-2. Create and activate a virtual environment (optional but recommended):
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install the package in development mode:
-```bash
-pip install -e .
-```
-
-4. Install development dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-## Program Flow and Debugging Guide
-
-### High-Level Flow
-1. **Input Validation**
-   - Check file existence and permissions
-   - Validate file formats and required columns
-   - Log validation results at DEBUG level
-
-2. **Data Loading**
-   - Import CSV files using pandas
-   - Auto-detect file formats based on columns
-   - Handle empty files and malformed data
-   - Log file processing at DEBUG level
-
-3. **Data Standardization**
-   - Convert dates to YYYY-MM-DD format
-   - Standardize amounts (negative for debits, positive for credits)
-   - Clean descriptions (uppercase, remove special chars)
-   - Log transformations at DEBUG level
-
-4. **Reconciliation**
-   - Match transactions using post dates and amounts
-   - Handle partial matches and near-matches
-   - Generate reconciliation keys
-   - Log matching process at DEBUG level
-
-5. **Report Generation**
-   - Create Excel report with matched/unmatched transactions
-   - Calculate summary statistics
-   - Archive results
-   - Log report creation at INFO level
-
-### Logging Levels
-- **DEBUG**: Detailed information for troubleshooting
-  - File processing steps
-  - Data transformations
-  - Matching logic
-  - Performance metrics
-
-- **INFO**: General progress information
-  - File import success
-  - Record counts
-  - Report generation
-
-- **WARNING**: Issues that don't stop processing
-  - Missing optional columns
-  - Unusual data patterns
-  - Performance concerns
-
-- **ERROR**: Issues that prevent processing
-  - Missing required columns
-  - File access problems
-  - Data format errors
-
-### Common Issues and Solutions
-
-1. **File Format Detection**
-   - Issue: Unknown file format error
-   - Check: Required columns for each format
-   - Debug: Set logging to DEBUG and check column detection
-
-2. **Date Standardization**
-   - Issue: None/NaT dates
-   - Check: Input date formats in CSV
-   - Debug: Review standardize_date function logs
-
-3. **Amount Processing**
-   - Issue: Incorrect debit/credit signs
-   - Check: Institution-specific amount formats
-   - Debug: Enable DEBUG logging for amount processing
-
-4. **Matching Issues**
-   - Issue: Low match rates
-   - Check: Date alignment between sources
-   - Debug: Review reconciliation logs for match attempts
-
-### Troubleshooting Steps
-
-1. **Enable Detailed Logging**
+1. Clone the repository
+2. Create a virtual environment:
    ```bash
-   python -m reconcile aggregator.csv details/ --log-level DEBUG
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
-
-2. **Validate Input Files**
-   - Check file encoding (UTF-8 preferred)
-   - Verify column names match expected format
-   - Ensure no BOM markers or hidden characters
-
-3. **Check Intermediate Data**
-   - Review logs/reconciliation_*.log files
-   - Examine standardized data format
-   - Verify amount sign conventions
-
-4. **Test Format Processing**
+3. Install dependencies:
    ```bash
-   python -m pytest tests/test_file_formats.py -v
+   pip install -r requirements.txt
    ```
-
-5. **Verify Reconciliation Logic**
-   ```bash
-   python -m pytest tests/test_reconcile.py -v
-   ```
-
-### Error Handling
-
-The program implements robust error handling:
-1. File-level validation
-2. Data format checking
-3. Column presence verification
-4. Data type validation
-5. Graceful error recovery
-
-Each error is:
-- Logged appropriately
-- Includes context information
-- Suggests potential fixes
-- Preserves data integrity
-
-## Data Flow
-
-### Detail Records Processing
-1. Each detail record file is processed based on its institution format
-2. Records are standardized to include:
-   - `transaction_date`: Standardized transaction date
-   - `post_date`: Standardized posting date
-   - `description`: Transaction description
-   - `amount`: Standardized amount (negative for debits, positive for credits)
-   - `category`: Transaction category (if available)
-   - `source_file`: Original file name
-
-### Aggregator Record Processing
-1. Aggregator records are standardized to include:
-   - `transaction_date`: Standardized transaction date
-   - `post_date`: Same as transaction_date (since aggregator records don't distinguish)
-   - `description`: Transaction description
-   - `amount`: Standardized amount (negative for debits, positive for credits)
-   - `category`: Transaction category
-   - `tags`: Transaction tags
-   - `account`: Account name/identifier
-   - `source_file`: "aggregator"
-
-### Reconciliation Process
-1. Create unique keys for each transaction:
-   - Detail records: `D:YYYY-MM-DD_AMOUNT`
-   - Aggregator records: `A:YYYY-MM-DD_AMOUNT`
-   - Example: `D:2024-03-15_-123.45`
-
-2. Match transactions based on:
-   - Primary: Post date matches (marked with `P:` prefix)
-   - Secondary: Transaction date matches (marked with `T:` prefix)
-   - Amount matches (including sign)
-
-3. Mark transactions as:
-   - `P:YYYY-MM-DD_AMOUNT` for Post Date matched transactions
-   - `T:YYYY-MM-DD_AMOUNT` for Transaction Date matched transactions
-   - `U:YYYY-MM-DD_AMOUNT` for unmatched aggregator records
-   - `D:YYYY-MM-DD_AMOUNT` for unmatched detail records
-
-### Reconciled Key Format
-
-The `reconciled_key` is a unique identifier for each transaction with the following format:
-```
-{PREFIX}:{DATE}_{AMOUNT}
-```
-
-Where:
-- `PREFIX` is one of:
-  - `P`: Post Date matched transaction
-  - `T`: Transaction Date matched transaction
-  - `U`: Unmatched aggregator record
-  - `D`: Unmatched detail record
-  - `A`: Aggregator record (before matching)
-- `DATE` is the transaction date in YYYY-MM-DD format
-- `AMOUNT` is the standardized amount with sign
-  - Negative for debits (money out)
-  - Positive for credits (money in)
-  - No currency symbols or commas
-  - Decimal point for cents
-
-Examples:
-- `P:2024-03-15_-123.45` - Post Date matched transaction
-- `T:2024-03-16_-456.78` - Transaction Date matched transaction
-- `D:2024-03-17_-789.01` - Unmatched detail record
-- `U:2024-03-18_234.56` - Unmatched aggregator record
-- `A:2024-03-19_-345.67` - Aggregator record before matching
-
-## Data Formats and Processing Stages
-
-### Input DataFrames
-Each input file is read into a pandas DataFrame with institution-specific columns:
-
-#### Detail Records (Example - Discover)
-```python
-{
-    'transaction_date': ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17'],
-    'post_date': ['2024-03-16', '2024-03-16', '2024-03-17', '2024-03-18'],
-    'description': ['Grocery Store', 'Grocery Store', 'Restaurant', 'Gas Station'],
-    'amount': [123.45, 123.45, 67.89, 45.00],  # Note: Discover shows positive amounts for debits
-    'category': ['Food', 'Food', 'Food', 'Transportation'],
-    'source_file': ['discover_card.csv', 'discover_card.csv', 'discover_card.csv', 'discover_card.csv']
-}
-```
-
-#### Detail Records (Example - Amex)
-```python
-{
-    'transaction_date': ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17'],
-    'description': ['Grocery Store', 'Grocery Store', 'Restaurant', 'Gas Station'],
-    'amount': [-123.45, 123.45, -67.89, 45.00],  # Note: Amex uses mixed signs for debits
-    'category': ['Food', 'Food', 'Food', 'Transportation'],
-    'source_file': ['amex_card.csv', 'amex_card.csv', 'amex_card.csv', 'amex_card.csv']
-}
-```
-
-#### Detail Records (Example - Capital One)
-```python
-{
-    'transaction_date': ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17'],
-    'post_date': ['2024-03-16', '2024-03-16', '2024-03-17', '2024-03-18'],
-    'description': ['Grocery Store', 'Grocery Store', 'Restaurant', 'Gas Station'],
-    'debit': [123.45, 123.45, 67.89, 45.00],  # Note: Capital One uses separate Debit/Credit columns
-    'credit': [None, None, None, None],
-    'category': ['Food', 'Food', 'Food', 'Transportation'],
-    'source_file': ['capital_one.csv', 'capital_one.csv', 'capital_one.csv', 'capital_one.csv']
-}
-```
-
-#### Detail Records (Example - Alliant)
-```python
-{
-    'transaction_date': ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17'],
-    'description': ['Grocery Store', 'Grocery Store', 'Restaurant', 'Gas Station'],
-    'amount': ['$123.45', '$123.45', '$67.89', '$45.00'],  # Note: Alliant uses $ symbol and positive amounts
-    'category': ['Food', 'Food', 'Food', 'Transportation'],
-    'source_file': ['alliant.csv', 'alliant.csv', 'alliant.csv', 'alliant.csv']
-}
-```
-
-#### Detail Records (Example - Chase)
-```python
-{
-    'transaction_date': ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17'],
-    'post_date': ['2024-03-16', '2024-03-16', '2024-03-17', '2024-03-18'],
-    'description': ['Grocery Store', 'Grocery Store', 'Restaurant', 'Gas Station'],
-    'amount': [-123.45, -123.45, -67.89, -45.00],  # Note: Chase shows negative amounts for debits
-    'category': ['Food', 'Food', 'Food', 'Transportation'],
-    'source_file': ['chase.csv', 'chase.csv', 'chase.csv', 'chase.csv']
-}
-```
-
-#### Aggregator Record (Example - Empower)
-```python
-{
-    'transaction_date': ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17'],
-    'description': ['Grocery Store', 'Grocery Store', 'Restaurant', 'Gas Station'],
-    'amount': [-123.45, -123.45, -67.89, -45.00],  # Note: Aggregator shows negative amounts for debits
-    'category': ['Food', 'Food', 'Food', 'Transportation'],
-    'tags': ['', '', '', ''],
-    'account': ['Discover', 'Discover', 'Discover', 'Discover'],
-    'source_file': ['empower.csv', 'empower.csv', 'empower.csv', 'empower.csv']
-}
-```
-
-### Standardized Format
-After processing, all records are standardized to:
-```python
-{
-    'transaction_date': ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17'],
-    'post_date': ['2024-03-16', '2024-03-16', '2024-03-17', '2024-03-18'],
-    'description': ['Grocery Store', 'Grocery Store', 'Restaurant', 'Gas Station'],
-    'amount': [-123.45, -123.45, -67.89, -45.00],  # All amounts standardized to negative for debits
-    'category': ['Food', 'Food', 'Food', 'Transportation'],
-    'tags': ['', '', '', ''],
-    'account': ['Discover', 'Discover', 'Discover', 'Discover'],
-    'source_file': ['discover_card.csv', 'discover_card.csv', 'discover_card.csv', 'discover_card.csv']
-}
-```
-
-### Amount Sign Handling by Format
-Each format requires specific processing to standardize amounts:
-
-1. **Discover Format**
-   - Raw data: Positive amounts for debits
-   - Processing: Invert all amounts (multiply by -1)
-
-2. **Amex Format**
-   - Raw data: Mixed signs (some positive, some negative for debits)
-   - Processing: Invert all amounts (multiply by -1)
-
-3. **Capital One Format**
-   - Raw data: Separate Debit and Credit columns
-   - Processing: Combine columns, negate debits, keep credits positive
-
-4. **Alliant Format**
-   - Raw data: Positive amounts with $ symbol
-   - Processing: Remove $ symbol, invert all amounts (multiply by -1)
-
-5. **Chase Format**
-   - Raw data: Negative amounts for debits
-   - Processing: Keep original signs
-
-6. **Aggregator Format (Empower)**
-   - Raw data: Negative amounts for debits
-   - Processing: Keep original signs
-
-### Intermediate DataFrames
-
-#### Standardized Detail Records
-After processing each institution's format, all detail records are standardized to:
-```python
-{
-    'Transaction Date': ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17'],
-    'Post Date': ['2024-03-16', '2024-03-16', '2024-03-17', '2024-03-18'],
-    'Description': ['Grocery Store', 'Grocery Store', 'Restaurant', 'Gas Station'],
-    'Amount': [-123.45, -123.45, -67.89, -45.00],
-    'Category': ['Food', 'Food', 'Food', 'Transportation'],
-    'source_file': ['discover_card.csv', 'discover_card.csv', 'discover_card.csv', 'discover_card.csv']
-}
-```
-
-#### Standardized Aggregator Records
-Aggregator records are standardized to:
-```python
-{
-    'Transaction Date': ['2024-03-15', '2024-03-16', '2024-03-19'],
-    'Post Date': ['2024-03-15', '2024-03-16', '2024-03-19'],
-    'Description': ['Grocery Store', 'Restaurant', 'Online Purchase'],
-    'Amount': [-123.45, -67.89, -99.99],
-    'Category': ['Groceries', 'Dining', 'Shopping'],
-    'Tags': ['', '', ''],
-    'Account': ['Discover', 'Discover', 'Discover'],
-    'source_file': ['aggregator', 'aggregator', 'aggregator']
-}
-```
-
-### Matching Process
-
-1. **Key Generation**
-   - Detail records: `D:YYYY-MM-DD_AMOUNT`
-   - Aggregator records: `A:YYYY-MM-DD_AMOUNT`
-   - Example: `D:2024-03-15_-123.45`
-
-2. **Matching Rules**
-   - Primary match: Post date matches
-   - Secondary match: Transaction date matches
-   - Amount matches (including sign)
-   - Position/Order: Transactions are matched in order of appearance within their respective files
-
-3. **Match Types**
-   - **Exact Match**: 
-     - Post date matches exactly
-     - Transaction date matches exactly
-     - Amount matches exactly (including sign)
-     - Position in file is considered for tie-breaking
-   - **Partial Match**: 
-     - Post date matches but transaction date or amount differs
-     - Transaction date matches but post date or amount differs
-     - Position in file is considered for tie-breaking
-   - **No Match**: 
-     - Post dates don't match
-     - And transaction dates don't match
-     - Or amounts don't match
-     - Or position constraints not met
-
-4. **Match Resolution**
-   - If multiple potential matches exist:
-     1. First try to match on post date and amount, considering position
-     2. If no match, try to match on transaction date and amount, considering position
-     3. If still no match, mark as unmatched
-   - Position Rules:
-     - Matches must maintain relative order within their respective files
-     - A transaction can only match with records that appear after its last matched transaction
-     - This prevents "cross-matching" of transactions that would violate the natural order
-   - Unmatched transactions are preserved in the output
-   - Matched transactions are marked with the source of the match
-
-### Example: Full Merge Process with Position
-
-#### Input Data
-
-**Detail Records (Discover)**
-```python
-{
-    'transaction_date': ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17'],
-    'post_date': ['2024-03-16', '2024-03-16', '2024-03-17', '2024-03-18'],
-    'description': ['Grocery Store', 'Grocery Store', 'Restaurant', 'Gas Station'],
-    'amount': [123.45, 123.45, 67.89, 45.00],  # Note: Discover shows positive amounts for debits
-    'category': ['Food', 'Food', 'Food', 'Transportation'],
-    'source_file': ['discover_card.csv', 'discover_card.csv', 'discover_card.csv', 'discover_card.csv']
-}
-```
-
-**Aggregator Records**
-```python
-{
-    'transaction_date': ['2024-03-16', '2024-03-16', '2024-03-19'],
-    'post_date': ['2024-03-16', '2024-03-16', '2024-03-19'],
-    'description': ['Grocery Store', 'Restaurant', 'Online Purchase'],
-    'amount': [-123.45, -67.89, -99.99],
-    'category': ['Groceries', 'Dining', 'Shopping'],
-    'tags': ['', '', ''],
-    'account': ['Discover', 'Discover', 'Discover'],
-    'source_file': ['aggregator', 'aggregator', 'aggregator']
-}
-```
-
-#### Matching Process with Position
-
-1. **First Detail Transaction (Grocery Store, -123.45)**:
-   ✓ Detail Post Date (2024-03-16) matches Aggregator Transaction Date (2024-03-16)
-   ✓ Amount matches (-123.45)
-   ✓ Unmatched records available: Yes
-   = Result: P:2024-03-15_-123.45 (matched)
-   - Category from aggregator ('Groceries') is used
-   - Note: Transaction Date not evaluated since Post Date matched
-
-2. **Second Detail Transaction (Grocery Store, -123.45)**:
-   ✓ Detail Post Date (2024-03-16) matches Aggregator Transaction Date (2024-03-16)
-   ✓ Amount matches (-123.45)
-   ✗ Unmatched records available: No (aggregator record already matched)
-   = Result: D:2024-03-15_-123.45 (unmatched detail)
-   - Category from detail record ('Food') is used
-   - Note: Transaction Date not evaluated since Post Date matched
-
-3. **Third Detail Transaction (Restaurant, -67.89)**:
-   ✗ Detail Post Date (2024-03-17) doesn't match Aggregator Transaction Date (2024-03-16)
-   ✓ Detail Transaction Date (2024-03-16) matches Aggregator Transaction Date (2024-03-16)
-   ✓ Amount matches (-67.89)
-   ✓ Unmatched records available: Yes
-   = Result: P:2024-03-16_-67.89 (matched)
-   - Category from aggregator ('Dining') is used
-
-4. **Fourth Detail Transaction (Gas Station, -45.00)**:
-   ✗ Detail Post Date (2024-03-18) doesn't match Aggregator Transaction Date (2024-03-16)
-   ✗ Detail Transaction Date (2024-03-17) doesn't match Aggregator Transaction Date (2024-03-16)
-   ✓ Amount matches (-45.00)
-   ✗ Unmatched records available: No (no matching dates)
-   = Result: D:2024-03-17_-45.00 (unmatched detail)
-   - Category from detail record ('Transportation') is used
-
-5. **Fifth Transaction (Online Purchase, -99.99)**:
-   ✗ Detail Post Date (2024-03-19) doesn't match any remaining Detail Post Date
-   ✗ Detail Transaction Date (2024-03-19) doesn't match any remaining Detail Transaction Date
-   ✓ Amount matches (-99.99)
-   ✗ Unmatched records available: No (no matching dates)
-   = Result: U:2024-03-19_-99.99 (unmatched aggregator)
-   - Category from aggregator ('Shopping') is used
-   - Note: This is an unreconciled aggregator record
-
-#### Final Output
-```python
-{
-    'date': ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17', '2024-03-19'],
-    'year_month': ['2024-03', '2024-03', '2024-03', '2024-03', '2024-03'],
-    'account': ['Discover', 'Discover', 'Discover', 'Discover', 'Discover'],
-    'description': ['Grocery Store', 'Grocery Store', 'Restaurant', 'Gas Station', 'Online Purchase'],
-    'category': ['Groceries', 'Food', 'Dining', 'Transportation', 'Shopping'],
-    'tags': ['', '', '', '', ''],
-    'amount': [-123.45, -123.45, -67.89, -45.00, -99.99],
-    'reconciled_key': ['P:2024-03-15_-123.45', 'D:2024-03-15_-123.45', 'P:2024-03-16_-67.89', 'D:2024-03-17_-45.00', 'U:2024-03-19_-99.99'],
-    'matched': [True, False, True, False, False]
-}
-```
-
-Key Points:
-- Categories from aggregator take precedence for matched transactions
-- All transactions are preserved in the output, whether matched or not
-- Each transaction can only be matched once
-- We don't match duplicate detail transactions even if they match an aggregator record
-- We don't enforce chronological ordering in the matching process
-
-## Input File Formats
-
-### Aggregator Record (Required)
-A CSV file containing the consolidated transaction records with the following columns:
-- `Date`: Transaction date (YYYY-MM-DD format)
-- `Description`: Transaction description
-- `Amount`: Transaction amount (negative for debits, positive for credits)
-- `Category`: Transaction category
-- `Tags`: Optional transaction tags
-- `Account`: Account name/identifier
-
-### Detail Records (Required)
-CSV files from various financial institutions. The tool supports the following formats:
-
-#### Discover Card
-Required columns:
-- `Trans. Date`: Transaction date
-- `Post Date`: Posting date
-- `Description`: Transaction description
-- `Amount`: Transaction amount
-- `Category`: Transaction category (optional)
-
-#### American Express
-Required columns:
-- `Date`: Transaction date
-- `Description`: Transaction description
-- `Card Member`: Cardholder name
-- `Account #`: Account number
-- `Amount`: Transaction amount
-
-#### Capital One
-Required columns:
-- `Transaction Date`: Transaction date
-- `Posted Date`: Posting date
-- `Card No.`: Card number
-- `Description`: Transaction description
-- `Category`: Transaction category (optional)
-- `Debit`: Debit amount
-- `Credit`: Credit amount
-
-#### Alliant Credit Union
-Required columns:
-- `Date`: Transaction date
-- `Description`: Transaction description
-- `Amount`: Transaction amount
-- `Balance`: Account balance
-- `Post Date`: Posting date
-
-#### Chase
-Required columns:
-- `Details`: Transaction details
-- `Posting Date`: Posting date
-- `Description`: Transaction description
-- `Amount`: Transaction amount
-- `Type`: Transaction type
-- `Balance`: Account balance
-
-## Data Standardization Rules
-
-### Date Handling
-- All dates are standardized to YYYY-MM-DD format
-- Supports various input formats:
-  - ISO format (YYYY-MM-DD)
-  - US format (MM/DD/YYYY)
-  - UK format (DD-MM-YYYY)
-  - Compact format (YYYYMMDD)
-  - Short year format (M/D/YY)
-- Invalid dates are converted to NULL
-- Missing dates are converted to NULL
-
-### Amount Handling
-- All amounts are standardized to decimal numbers
-- Sign convention:
-  - Negative for debits (money out)
-  - Positive for credits (money in)
-- Currency symbols and commas are removed
-- Invalid amounts default to 0.0
-- Missing amounts default to 0.0
-
-### Description Handling
-- Leading/trailing whitespace is removed
-- Multiple spaces are collapsed to single space
-- Special characters are preserved
-- Empty descriptions are converted to "NO DESCRIPTION"
-
-### Category Handling
-- Leading/trailing whitespace is removed
-- Empty categories are converted to NULL
-- Categories are preserved from source if available
-
-## Output Format
-
-The reconciliation report is generated as an Excel file with the following columns:
-- `date`: Transaction date
-- `year_month`: Year and month of transaction (YYYY-MM)
-- `account`: Account name
-- `description`: Transaction description
-- `category`: Transaction category (from aggregator if matched, from detail if unmatched)
-- `tags`: Transaction tags (from aggregator if available)
-- `amount`: Transaction amount
-- `reconciled_key`: Unique key for the transaction (see Reconciled Key Format section)
-- `matched`: Boolean indicating if transaction was matched
 
 ## Usage
 
+### Command Line Interface
+
 ```bash
-python reconcile.py aggregator.csv details_folder/ --log-level DEBUG
+python src/reconcile.py <aggregator_file> <details_folder> [--log-level LEVEL]
 ```
 
 Arguments:
-- `aggregator.csv`: Path to the aggregator record file
-- `details_folder/`: Path to folder containing detail record files
+- `aggregator_file`: Path to the aggregator CSV file
+- `details_folder`: Path to folder containing detail CSV files
 - `--log-level`: Optional logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 
-## Output Files
+### Python API
 
-The tool generates:
-1. Reconciliation report (Excel file) in the `archive` directory
-2. Log file in the `logs` directory
+```python
+from reconcile import reconcile_transactions, import_csv, import_folder
 
-## Error Handling
+# Import data
+aggregator_df = import_csv('path/to/aggregator.csv')
+detail_records = import_folder('path/to/details/folder')
 
-- Invalid dates are converted to NULL
-- Invalid amounts default to 0.0
-- Missing required columns cause the file to be skipped
-- Empty files are logged but not processed
-- Duplicate transactions are handled based on the first occurrence
-- Missing files are logged but don't stop processing
-- File permission errors are logged but don't stop processing
+# Reconcile transactions
+result = reconcile_transactions(aggregator_df, detail_records)
+```
 
-## Features
+## Output
 
-- Supports multiple financial institution formats
-- Handles different date formats and amount formats
-- Comprehensive matching strategy using compound keys
-- Generates detailed reconciliation reports in Excel format
-- Comprehensive logging for debugging and auditing
-- Graceful error handling for various edge cases
+The system generates a reconciliation report with the following information:
+
+1. Matched transactions (using aggregator metadata)
+2. Unmatched transactions from both aggregator and detail sources
+3. Reconciliation keys for tracking matches
+4. YearMonth grouping for analysis
+5. Source file tracking
 
 ## Development
 
 ### Running Tests
+
 ```bash
-python -m pytest test_reconcile.py -v
+python -m pytest tests/ -v --html=logs/report.html
 ```
 
-### Project Structure
-```
-local_reconcile/
-├── reconcile.py          # Main reconciliation logic
-├── test_reconcile.py     # Test suite
-├── requirements.txt      # Project dependencies
-├── .gitignore           # Git ignore rules
-├── README.md            # Project documentation
-├── logs/                # Log files (gitignored)
-└── archive/             # Output files (gitignored)
-```
+### Adding New Formats
+
+To add support for a new format:
+
+1. Create a new processing function in `src/reconcile.py`
+2. Add format detection in `import_csv()`
+3. Add test cases in `tests/test_reconcile.py`
 
 ## License
 
-[Add your license information here] 
+This project is licensed under the MIT License - see the LICENSE file for details. 
