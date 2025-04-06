@@ -1,152 +1,119 @@
-# Transaction Reconciliation System
+# Local Reconcile
 
-A Python-based system for reconciling financial transactions across multiple sources and formats.
+A Python package for reconciling financial transactions across multiple sources.
 
-## Overview
+## Supported File Formats
 
-This system standardizes transaction data from various financial institutions into a common format for reconciliation purposes. It supports multiple input formats and provides a standardized output format that makes it easy to match transactions across different sources.
+### Discover
+- **File Pattern**: `discover_*.csv`
+- **Columns**:
+  - `Trans. Date`: MM/DD/YYYY
+  - `Post Date`: MM/DD/YYYY
+  - `Description`: String
+  - `Amount`: Decimal (positive for credits, negative for debits)
+  - `Category`: String
 
-## Supported Formats
+### Capital One
+- **File Pattern**: `capital_one_*.csv`
+- **Columns**:
+  - `Transaction Date`: YYYY-MM-DD
+  - `Posted Date`: YYYY-MM-DD
+  - `Card No.`: String
+  - `Description`: String
+  - `Category`: String
+  - `Debit`: Decimal (positive)
+  - `Credit`: Decimal (positive)
 
-The system currently supports the following input formats:
+### Chase
+- **File Pattern**: `chase_*.csv`
+- **Columns**:
+  - `Details`: String
+  - `Posting Date`: MM/DD/YYYY
+  - `Description`: String
+  - `Amount`: Decimal (positive for credits, negative for debits)
+  - `Type`: String
+  - `Balance`: Decimal
+  - `Check or Slip #`: String
 
-1. **Discover Format**
-   - Trans. Date: Transaction date
-   - Post Date: Posting date
-   - Description: Transaction description
-   - Amount: Transaction amount (positive for debits)
-   - Category: Transaction category
+### Alliant Checking
+- **File Pattern**: `alliant_checking_*.csv`
+- **Columns**:
+  - `Date`: MM/DD/YYYY
+  - `Description`: String
+  - `Amount`: Decimal (positive for credits, negative for debits)
+  - `Balance`: Decimal
 
-2. **American Express Format**
-   - Date: Transaction date
-   - Description: Transaction description
-   - Card Member: Card member name
-   - Account #: Account number
-   - Amount: Transaction amount (positive for debits)
+### Alliant Visa
+- **File Pattern**: `alliant_visa_*.csv`
+- **Columns**:
+  - `Date`: MM/DD/YYYY
+  - `Description`: String
+  - `Amount`: Decimal (positive for debits, negative for credits)
+  - `Balance`: Decimal
+  - `Post Date`: MM/DD/YYYY
 
-3. **Capital One Format**
-   - Transaction Date: Transaction date
-   - Posted Date: Posting date
-   - Card No.: Card number
-   - Description: Transaction description
-   - Category: Transaction category
-   - Debit: Debit amount
-   - Credit: Credit amount
+## Test Structure
 
-4. **Alliant Format**
-   - Date: Transaction date
-   - Description: Transaction description
-   - Amount: Transaction amount (with $ prefix)
-   - Balance: Account balance
-   - Post Date: Posting date
+The test suite is organized into seven sequentially numbered files that follow a progressive testing path:
 
-5. **Chase Format**
-   - Details: Transaction type
-   - Posting Date: Posting date
-   - Description: Transaction description
-   - Amount: Transaction amount (negative for debits)
-   - Type: Transaction type
-   - Balance: Account balance
-   - Check or Slip #: Check number
+1. `test_1_conftest.py`: Base fixtures and configuration
+2. `test_2_utils.py`: Utility functions (date standardization, amount cleaning)
+3. `test_3_file_formats.py`: File format validation and processing
+4. `test_4_file_loads.py`: File and folder import functionality
+5. `test_5_format_standardization.py`: Data standardization (descriptions, categories)
+6. `test_6_reconciliation.py`: Transaction matching and reconciliation
+7. `test_7_reporting.py`: Report generation and output
 
-6. **Aggregator Format**
-   - Date: Transaction date
-   - Description: Transaction description
-   - Amount: Transaction amount (negative for debits)
-   - Category: Transaction category
-   - Tags: Additional tags
-   - Account: Account name
-
-## Standardized Output Format
-
-All input formats are converted to a common output format with the following columns:
-
-- **Transaction Date**: Date of the transaction (YYYY-MM-DD)
-- **Post Date**: Date the transaction posted (YYYY-MM-DD)
-- **Description**: Cleaned transaction description
-- **Amount**: Standardized amount (negative for debits, positive for credits)
-- **Category**: Transaction category
-- **source_file**: Origin of the transaction
-
-## Reconciliation Process
-
-The system uses a sophisticated matching algorithm that:
-
-1. Standardizes all input formats to the common output format
-2. Creates reconciliation keys for matching:
-   - P: prefix for Post Date matches (from aggregator)
-   - T: prefix for Transaction Date matches (from detail records)
-   - UA: prefix for unmatched aggregator records
-   - UD: prefix for unmatched detail records
-3. Matches transactions based on both Post Date and Transaction Date
-4. Preserves metadata from the aggregator for matched records
-5. Includes both unmatched aggregator and detail records in the output
+Note: The numbering is for human readability and organization. Test execution order is enforced using pytest dependency markers.
 
 ## Installation
 
-1. Clone the repository
-2. Create a virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+pip install -e .
+```
 
 ## Usage
 
-### Command Line Interface
-
-```bash
-python src/reconcile.py <aggregator_file> <details_folder> [--log-level LEVEL]
-```
-
-Arguments:
-- `aggregator_file`: Path to the aggregator CSV file
-- `details_folder`: Path to folder containing detail CSV files
-- `--log-level`: Optional logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-
-### Python API
-
 ```python
-from reconcile import reconcile_transactions, import_csv, import_folder
+from src.reconcile import reconcile_transactions
 
-# Import data
-aggregator_df = import_csv('path/to/aggregator.csv')
-detail_records = import_folder('path/to/details/folder')
+# Import transactions from multiple sources
+source_df = import_folder("path/to/source/files")
+target_df = import_folder("path/to/target/files")
 
 # Reconcile transactions
-result = reconcile_transactions(aggregator_df, detail_records)
+matches, unmatched = reconcile_transactions(source_df, target_df)
+
+# Generate report
+generate_reconciliation_report(matches, unmatched, "report.txt")
 ```
-
-## Output
-
-The system generates a reconciliation report with the following information:
-
-1. Matched transactions (using aggregator metadata)
-2. Unmatched transactions from both aggregator and detail sources
-3. Reconciliation keys for tracking matches
-4. YearMonth grouping for analysis
-5. Source file tracking
 
 ## Development
 
 ### Running Tests
 
 ```bash
-python -m pytest tests/ -v --html=logs/report.html
+pytest
 ```
 
-### Adding New Formats
+### Test Structure
 
-To add support for a new format:
+Tests are organized in numbered files for human readability and use pytest dependency markers to enforce execution order:
 
-1. Create a new processing function in `src/reconcile.py`
-2. Add format detection in `import_csv()`
-3. Add test cases in `tests/test_reconcile.py`
+1. `test_1_conftest.py`: Test fixtures and shared resources
+2. `test_2_utils.py`: Utility function tests (date formatting, amount cleaning)
+3. `test_3_file_formats.py`: File format validation (column names, data types)
+4. `test_4_file_loads.py`: File reading and parsing tests
+5. `test_5_format_standardization.py`: Format conversion and standardization
+6. `test_6_reconciliation.py`: Transaction matching and reconciliation
+7. `test_7_reporting.py`: Report generation and formatting
 
-## License
+Each test file builds on the previous ones, with dependency markers ensuring proper execution order. The numbered filenames make it easy to navigate the test suite and understand the progression of tests.
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+### Code Style
+
+This project uses black for code formatting:
+
+```bash
+black .
+``` 
