@@ -111,13 +111,15 @@ def process_discover_format(df):
     # Standardize description
     result['Description'] = result['Description'].str.upper()
     
-    # Add missing columns
-    result['Category'] = result['Category'].fillna('')
-    result['Tags'] = ''
-    result['Account'] = 'Discover'
+    # Add source_file
+    result['source_file'] = 'discover'
+    
+    # Add Category if not present
+    if 'Category' not in result.columns:
+        result['Category'] = ''
     
     # Select and rename columns
-    result = result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'Tags', 'Account', 'source_file']]
+    result = result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
     
     logger.debug(f"Processed {len(result)} Discover records")
     return result
@@ -139,13 +141,12 @@ def process_amex_format(df):
     # Standardize description
     result['Description'] = result['Description'].str.upper()
     
-    # Add missing columns
-    result['Category'] = ''  # Add empty Category column
-    result['Tags'] = ''
-    result['Account'] = 'Amex'
+    # Add source_file and Category
+    result['source_file'] = 'amex'
+    result['Category'] = ''  # Amex doesn't provide categories
     
     # Select and rename columns
-    result = result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'Tags', 'Account', 'source_file']]
+    result = result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
     
     logger.debug(f"Processed {len(result)} Amex records")
     return result
@@ -167,13 +168,13 @@ def process_capital_one_format(df):
     # Standardize description
     result['Description'] = result['Description'].str.upper()
     
-    # Add missing columns
-    result['Category'] = result['Category'].fillna('')
-    result['Tags'] = ''
-    result['Account'] = 'Capital One'
+    # Add source_file and Category
+    result['source_file'] = 'capital_one'
+    if 'Category' not in result.columns:
+        result['Category'] = ''
     
     # Select and rename columns
-    result = result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'Tags', 'Account', 'source_file']]
+    result = result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
     
     logger.debug(f"Processed {len(result)} Capital One records")
     return result
@@ -195,13 +196,13 @@ def process_alliant_format(df):
     # Standardize description
     result['Description'] = result['Description'].str.upper()
     
-    # Add missing columns
-    result['Category'] = ''
-    result['Tags'] = ''
-    result['Account'] = 'Alliant'
+    # Add source_file and Category
+    result['source_file'] = 'alliant'
+    if 'Category' not in result.columns:
+        result['Category'] = ''
     
     # Select and rename columns
-    result = result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'Tags', 'Account', 'source_file']]
+    result = result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
     
     logger.debug(f"Processed {len(result)} Alliant records")
     return result
@@ -212,23 +213,24 @@ def process_chase_format(df):
     result = df.copy()
     
     # Standardize dates
-    result['Transaction Date'] = result['Details'].apply(standardize_date)
-    result['Post Date'] = result['Transaction Date']  # Chase doesn't distinguish
+    result['Transaction Date'] = result['Posting Date'].apply(standardize_date)
+    result['Post Date'] = result['Posting Date'].apply(standardize_date)
     
     # Clean and standardize amounts
-    result['Amount'] = result['Description'].apply(clean_amount)  # Amount is in Description column
-    # Chase shows negative amounts for debits, so we keep original signs
+    result['Amount'] = result['Amount'].apply(clean_amount)
+    # Chase shows positive amounts for debits, so we invert them
+    result['Amount'] = -result['Amount']
     
     # Standardize description
-    result['Description'] = result['Posting Date'].astype(str).str.strip('"').str.upper()  # Description is in Posting Date column
+    result['Description'] = result['Description'].str.upper()
     
-    # Add missing columns
-    result['Category'] = ''
-    result['Tags'] = ''
-    result['Account'] = 'Chase'
+    # Add source_file and Category
+    result['source_file'] = 'chase'
+    if 'Category' not in result.columns:
+        result['Category'] = ''
     
     # Select and rename columns
-    result = result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'Tags', 'Account', 'source_file']]
+    result = result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
     
     logger.debug(f"Processed {len(result)} Chase records")
     return result
@@ -240,22 +242,22 @@ def process_aggregator_format(df):
     
     # Standardize dates
     result['Transaction Date'] = result['Date'].apply(standardize_date)
-    result['Post Date'] = result['Transaction Date']  # Aggregator doesn't distinguish
+    result['Post Date'] = result['Date'].apply(standardize_date)
     
     # Clean and standardize amounts
     result['Amount'] = result['Amount'].apply(clean_amount)
-    # Aggregator shows negative amounts for debits, so we keep original signs
     
     # Standardize description
     result['Description'] = result['Description'].str.upper()
     
-    # Add missing columns
-    result['Category'] = result['Category'].fillna('')
-    result['Tags'] = result['Tags'].fillna('')
-    result['Account'] = result['Account'].fillna('')
+    # Add source_file
+    result['source_file'] = 'aggregator'
+    
+    # Keep Category from input
+    result['Category'] = df['Category']
     
     # Select and rename columns
-    result = result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'Tags', 'Account', 'source_file']]
+    result = result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
     
     logger.debug(f"Processed {len(result)} aggregator records")
     return result
@@ -271,7 +273,8 @@ def process_post_date_format(df):
     df['Amount'] = df['Amount'].apply(clean_amount)
     df['Amount'] = -df['Amount']  # Invert amount
     df['source_file'] = 'unknown'  # Add source_file column
-    return df[['Transaction Date', 'Post Date', 'Description', 'Amount', 'source_file']]
+    df['Category'] = ''  # Add empty Category column
+    return df[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
 
 def process_date_format(df):
     """Process detail format that uses Date column for date and single Amount column.
@@ -284,7 +287,8 @@ def process_date_format(df):
     df['Amount'] = df['Amount'].apply(clean_amount)
     df['Amount'] = -df['Amount']  # Invert amount
     df['source_file'] = 'unknown'  # Add source_file column
-    return df[['Transaction Date', 'Post Date', 'Description', 'Amount', 'source_file']]
+    df['Category'] = ''  # Add empty Category column
+    return df[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
 
 def process_debit_credit_format(df):
     """Process detail format that uses Posted Date for date and separate Debit/Credit columns.
@@ -314,7 +318,8 @@ def process_debit_credit_format(df):
             logger.debug(f"Converted Credit {row['Credit']} to Amount {row['Amount']}")
     
     df['source_file'] = 'unknown'  # Add source_file column
-    return df[['Transaction Date', 'Post Date', 'Description', 'Amount', 'source_file']]
+    df['Category'] = ''  # Add empty Category column
+    return df[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
 
 def reconcile_transactions(aggregator_df, detail_dfs):
     """Reconcile transactions between aggregator and detail records
@@ -330,33 +335,20 @@ def reconcile_transactions(aggregator_df, detail_dfs):
     # Process and combine detail records
     detail_processed = pd.concat([df for df in detail_dfs], ignore_index=True)
     
-    # Ensure both DataFrames have source_file columns
-    if 'source_file' not in detail_processed.columns:
-        detail_processed['source_file'] = 'unknown'
-    if 'source_file' not in aggregator_df.columns:
-        aggregator_df['source_file'] = 'aggregator'
-    
-    # Ensure both DataFrames have Category and Tags columns
-    if 'Category' not in detail_processed.columns:
-        detail_processed['Category'] = ''
-    if 'Category' not in aggregator_df.columns:
-        aggregator_df['Category'] = ''
-    if 'Tags' not in detail_processed.columns:
-        detail_processed['Tags'] = ''
-    if 'Tags' not in aggregator_df.columns:
-        aggregator_df['Tags'] = ''
+    # Process aggregator records to match detail format
+    aggregator_processed = process_aggregator_format(aggregator_df)
     
     # Initialize result DataFrame
     result = pd.DataFrame(columns=['Date', 'YearMonth', 'Account', 'Description', 'Category', 'Tags', 'Amount', 'reconciled_key', 'Matched'])
     
     # Try to match on Post Date first
     post_date_matches = detail_processed.merge(
-        aggregator_df,  # Use aggregator_df directly since it's already processed
+        aggregator_processed,
         left_on=['Post Date', 'Amount', 'Description'],
         right_on=['Post Date', 'Amount', 'Description'],
         how='outer',
         indicator=True,
-        suffixes=('_detail', '_agg')  # Add suffixes to distinguish columns
+        suffixes=('_detail', '_agg')
     )
     
     # Handle matched records
@@ -365,12 +357,12 @@ def reconcile_transactions(aggregator_df, detail_dfs):
         result = pd.concat([result, pd.DataFrame({
             'Date': matched['Post Date'],
             'YearMonth': matched['Post Date'].str[:7],
-            'Account': matched['Account'],
+            'Account': '',
             'Description': matched['Description'],
-            'Category': matched['Category'],
-            'Tags': matched['Tags'],
+            'Category': matched['Category_agg'],  # Use aggregator's category
+            'Tags': '',
             'Amount': matched['Amount'],
-            'reconciled_key': 'P:' + matched['source_file_detail'].astype(str),  # Use detail source
+            'reconciled_key': 'P:' + matched['source_file_detail'],  # Use detail's source_file
             'Matched': True
         })], ignore_index=True)
     
@@ -382,10 +374,10 @@ def reconcile_transactions(aggregator_df, detail_dfs):
             'YearMonth': unmatched_detail['Post Date'].str[:7],
             'Account': '',
             'Description': unmatched_detail['Description'],
-            'Category': unmatched_detail['Category'],
-            'Tags': unmatched_detail['Tags'],
+            'Category': unmatched_detail['Category_detail'],  # Use detail's category
+            'Tags': '',
             'Amount': unmatched_detail['Amount'],
-            'reconciled_key': 'D:' + unmatched_detail['source_file_detail'].astype(str),  # Use detail source
+            'reconciled_key': 'D:' + unmatched_detail['source_file_detail'],  # Use detail's source_file
             'Matched': False
         })], ignore_index=True)
     
@@ -395,12 +387,12 @@ def reconcile_transactions(aggregator_df, detail_dfs):
         result = pd.concat([result, pd.DataFrame({
             'Date': unmatched_agg['Post Date'],
             'YearMonth': unmatched_agg['Post Date'].str[:7],
-            'Account': unmatched_agg['Account'],
+            'Account': '',
             'Description': unmatched_agg['Description'],
-            'Category': unmatched_agg['Category'],
-            'Tags': unmatched_agg['Tags'],
+            'Category': unmatched_agg['Category_agg'],  # Use aggregator's category
+            'Tags': '',
             'Amount': unmatched_agg['Amount'],
-            'reconciled_key': 'U:' + unmatched_agg['source_file_agg'].astype(str),  # Use aggregator source
+            'reconciled_key': 'U:' + unmatched_agg['source_file_agg'],  # Use aggregator's source_file
             'Matched': False
         })], ignore_index=True)
     

@@ -913,4 +913,334 @@ def test_source_file_tracking(tmp_path):
     # Verify no records have empty dates or amounts
     assert not reconciled['Date'].isna().any(), "Found records with missing dates"
     assert not reconciled['Amount'].isna().any(), "Found records with missing amounts"
-    assert all(isinstance(date, str) and re.match(r'^\d{4}-\d{2}-\d{2}$', date) for date in reconciled['Date'] if pd.notna(date)), "Found dates in incorrect format" 
+    assert all(isinstance(date, str) and re.match(r'^\d{4}-\d{2}-\d{2}$', date) for date in reconciled['Date'] if pd.notna(date)), "Found dates in incorrect format"
+
+def test_reconcile_single_discover_format():
+    """Test reconciliation with only Discover format records
+    BUSINESS REQUIREMENT: Verifies handling of Discover format in isolation
+    - Proper processing of Discover records
+    - Correct matching with aggregator records
+    - Proper handling of unmatched records
+    """
+    # Create Discover record
+    discover_df = pd.DataFrame({
+        'Trans. Date': ['2024-03-15'],
+        'Post Date': ['2024-03-15'],
+        'Description': ['Test Transaction'],
+        'Amount': ['123.45'],
+        'Category': ['']
+    })
+    
+    # Create matching aggregator record
+    aggregator_df = pd.DataFrame({
+        'Date': ['2024-03-15'],
+        'Description': ['Test Transaction'],
+        'Amount': ['-123.45'],
+        'Category': ['Test'],
+        'Tags': [''],
+        'Account': ['Test Account']
+    })
+    
+    # Process Discover record
+    processed_discover = process_discover_format(discover_df)
+    
+    # Perform reconciliation
+    result = reconcile_transactions(aggregator_df, [processed_discover])
+    
+    # Verify the transaction was matched
+    assert len(result) == 1, "Should have exactly one record"
+    assert result['Matched'].iloc[0], "Transaction should be marked as matched"
+    assert result['reconciled_key'].iloc[0].startswith(('P:', 'T:')), "Should have P: or T: prefix"
+    assert result['Amount'].iloc[0] == -123.45, "Amount should match"
+    assert result['Date'].iloc[0] == '2024-03-15', "Date should match"
+
+def test_reconcile_single_amex_format():
+    """Test reconciliation with only Amex format records
+    BUSINESS REQUIREMENT: Verifies handling of Amex format in isolation
+    - Proper processing of Amex records
+    - Correct matching with aggregator records
+    - Proper handling of unmatched records
+    """
+    # Create Amex record
+    amex_df = pd.DataFrame({
+        'Date': ['2024-03-15'],
+        'Description': ['Test Transaction'],
+        'Card Member': ['JOHN DOE'],
+        'Account #': ['1234'],
+        'Amount': ['123.45']
+    })
+    
+    # Create matching aggregator record
+    aggregator_df = pd.DataFrame({
+        'Date': ['2024-03-15'],
+        'Description': ['Test Transaction'],
+        'Amount': ['-123.45'],
+        'Category': ['Test'],
+        'Tags': [''],
+        'Account': ['Test Account']
+    })
+    
+    # Process Amex record
+    processed_amex = process_amex_format(amex_df)
+    
+    # Perform reconciliation
+    result = reconcile_transactions(aggregator_df, [processed_amex])
+    
+    # Verify the transaction was matched
+    assert len(result) == 1, "Should have exactly one record"
+    assert result['Matched'].iloc[0], "Transaction should be marked as matched"
+    assert result['reconciled_key'].iloc[0].startswith(('P:', 'T:')), "Should have P: or T: prefix"
+    assert result['Amount'].iloc[0] == -123.45, "Amount should match"
+    assert result['Date'].iloc[0] == '2024-03-15', "Date should match"
+
+def test_reconcile_single_capital_one_format():
+    """Test reconciliation with only Capital One format records
+    BUSINESS REQUIREMENT: Verifies handling of Capital One format in isolation
+    - Proper processing of Capital One records
+    - Correct matching with aggregator records
+    - Proper handling of unmatched records
+    """
+    # Create Capital One record
+    capital_one_df = pd.DataFrame({
+        'Transaction Date': ['2024-03-15'],
+        'Posted Date': ['2024-03-15'],
+        'Card No.': ['1234'],
+        'Description': ['Test Transaction'],
+        'Category': [''],
+        'Debit': ['123.45'],
+        'Credit': [np.nan]
+    })
+    
+    # Create matching aggregator record
+    aggregator_df = pd.DataFrame({
+        'Date': ['2024-03-15'],
+        'Description': ['Test Transaction'],
+        'Amount': ['-123.45'],
+        'Category': ['Test'],
+        'Tags': [''],
+        'Account': ['Test Account']
+    })
+    
+    # Process Capital One record
+    processed_capital_one = process_capital_one_format(capital_one_df)
+    
+    # Perform reconciliation
+    result = reconcile_transactions(aggregator_df, [processed_capital_one])
+    
+    # Verify the transaction was matched
+    assert len(result) == 1, "Should have exactly one record"
+    assert result['Matched'].iloc[0], "Transaction should be marked as matched"
+    assert result['reconciled_key'].iloc[0].startswith(('P:', 'T:')), "Should have P: or T: prefix"
+    assert result['Amount'].iloc[0] == -123.45, "Amount should match"
+    assert result['Date'].iloc[0] == '2024-03-15', "Date should match"
+
+def test_reconcile_discover_with_aggregator():
+    """Test reconciliation between Discover and Aggregator formats
+    BUSINESS REQUIREMENT: Verifies handling of Discover-Aggregator reconciliation
+    - Proper matching of transactions
+    - Correct handling of unmatched records
+    - Proper source file tracking
+    """
+    # Create Discover records
+    discover_df = pd.DataFrame({
+        'Trans. Date': ['2024-03-15', '2024-03-16'],
+        'Post Date': ['2024-03-15', '2024-03-16'],
+        'Description': ['Test Transaction 1', 'Test Transaction 2'],
+        'Amount': ['123.45', '456.78'],
+        'Category': ['', '']
+    })
+    
+    # Create matching aggregator records
+    aggregator_df = pd.DataFrame({
+        'Date': ['2024-03-15', '2024-03-17'],  # One match, one unmatched
+        'Description': ['Test Transaction 1', 'Test Transaction 3'],
+        'Amount': ['-123.45', '-789.01'],
+        'Category': ['Test1', 'Test3'],
+        'Tags': ['', ''],
+        'Account': ['Test Account', 'Test Account']
+    })
+    
+    # Process Discover records
+    processed_discover = process_discover_format(discover_df)
+    
+    # Perform reconciliation
+    result = reconcile_transactions(aggregator_df, [processed_discover])
+    
+    # Verify matches and unmatched records
+    assert len(result) == 3, "Should have three records (one match, two unmatched)"
+    assert result['Matched'].sum() == 1, "Should have one matched record"
+    assert len(result[result['reconciled_key'].str.startswith('U:')]) == 2, "Should have two unmatched records"
+    assert result[result['Matched']]['Amount'].iloc[0] == -123.45, "Matched amount should be correct"
+
+def test_reconcile_amex_with_aggregator():
+    """Test reconciliation between Amex and Aggregator formats
+    BUSINESS REQUIREMENT: Verifies handling of Amex-Aggregator reconciliation
+    - Proper matching of transactions
+    - Correct handling of unmatched records
+    - Proper source file tracking
+    """
+    # Create Amex records
+    amex_df = pd.DataFrame({
+        'Date': ['2024-03-15', '2024-03-16'],
+        'Description': ['Test Transaction 1', 'Test Transaction 2'],
+        'Card Member': ['JOHN DOE', 'JOHN DOE'],
+        'Account #': ['1234', '1234'],
+        'Amount': ['123.45', '456.78']
+    })
+    
+    # Create matching aggregator records
+    aggregator_df = pd.DataFrame({
+        'Date': ['2024-03-15', '2024-03-17'],  # One match, one unmatched
+        'Description': ['Test Transaction 1', 'Test Transaction 3'],
+        'Amount': ['-123.45', '-789.01'],
+        'Category': ['Test1', 'Test3'],
+        'Tags': ['', ''],
+        'Account': ['Test Account', 'Test Account']
+    })
+    
+    # Process Amex records
+    processed_amex = process_amex_format(amex_df)
+    
+    # Perform reconciliation
+    result = reconcile_transactions(aggregator_df, [processed_amex])
+    
+    # Verify matches and unmatched records
+    assert len(result) == 3, "Should have three records (one match, two unmatched)"
+    assert result['Matched'].sum() == 1, "Should have one matched record"
+    assert len(result[result['reconciled_key'].str.startswith('U:')]) == 2, "Should have two unmatched records"
+    assert result[result['Matched']]['Amount'].iloc[0] == -123.45, "Matched amount should be correct"
+
+def test_reconcile_capital_one_with_aggregator():
+    """Test reconciliation between Capital One and Aggregator formats
+    BUSINESS REQUIREMENT: Verifies handling of Capital One-Aggregator reconciliation
+    - Proper matching of transactions
+    - Correct handling of unmatched records
+    - Proper source file tracking
+    """
+    # Create Capital One records
+    capital_one_df = pd.DataFrame({
+        'Transaction Date': ['2024-03-15', '2024-03-16'],
+        'Posted Date': ['2024-03-15', '2024-03-16'],
+        'Card No.': ['1234', '1234'],
+        'Description': ['Test Transaction 1', 'Test Transaction 2'],
+        'Category': ['', ''],
+        'Debit': ['123.45', '456.78'],
+        'Credit': [np.nan, np.nan]
+    })
+    
+    # Create matching aggregator records
+    aggregator_df = pd.DataFrame({
+        'Date': ['2024-03-15', '2024-03-17'],  # One match, one unmatched
+        'Description': ['Test Transaction 1', 'Test Transaction 3'],
+        'Amount': ['-123.45', '-789.01'],
+        'Category': ['Test1', 'Test3'],
+        'Tags': ['', ''],
+        'Account': ['Test Account', 'Test Account']
+    })
+    
+    # Process Capital One records
+    processed_capital_one = process_capital_one_format(capital_one_df)
+    
+    # Perform reconciliation
+    result = reconcile_transactions(aggregator_df, [processed_capital_one])
+    
+    # Verify matches and unmatched records
+    assert len(result) == 3, "Should have three records (one match, two unmatched)"
+    assert result['Matched'].sum() == 1, "Should have one matched record"
+    assert len(result[result['reconciled_key'].str.startswith('U:')]) == 2, "Should have two unmatched records"
+    assert result[result['Matched']]['Amount'].iloc[0] == -123.45, "Matched amount should be correct"
+
+def test_reconcile_all_formats_with_aggregator():
+    """Test reconciliation with all detail formats and aggregator
+    BUSINESS REQUIREMENT: Verifies handling of complete reconciliation process
+    - Proper processing of all format types
+    - Correct matching across all formats
+    - Proper handling of unmatched records
+    - Source file tracking for all formats
+    """
+    # Create records for each format
+    discover_df = pd.DataFrame({
+        'Trans. Date': ['2024-03-15'],
+        'Post Date': ['2024-03-15'],
+        'Description': ['Test Transaction 1'],
+        'Amount': ['123.45'],
+        'Category': ['']
+    })
+    
+    amex_df = pd.DataFrame({
+        'Date': ['2024-03-16'],
+        'Description': ['Test Transaction 2'],
+        'Card Member': ['JOHN DOE'],
+        'Account #': ['1234'],
+        'Amount': ['456.78']
+    })
+    
+    capital_one_df = pd.DataFrame({
+        'Transaction Date': ['2024-03-17'],
+        'Posted Date': ['2024-03-17'],
+        'Card No.': ['1234'],
+        'Description': ['Test Transaction 3'],
+        'Category': [''],
+        'Debit': ['789.01'],
+        'Credit': [np.nan]
+    })
+    
+    alliant_df = pd.DataFrame({
+        'Date': ['2024-03-18'],
+        'Description': ['Test Transaction 4'],
+        'Amount': ['$42.80'],
+        'Balance': ['$0.00'],
+        'Post Date': ['2024-03-18']
+    })
+    
+    chase_df = pd.DataFrame({
+        'Details': ['DEBIT'],
+        'Posting Date': ['03/19/2024'],
+        'Description': ['Test Transaction 5'],
+        'Amount': [-95.89],
+        'Type': ['ACH_DEBIT'],
+        'Balance': [3990.63],
+        'Check or Slip #': ['']
+    })
+    
+    # Create matching aggregator records
+    aggregator_df = pd.DataFrame({
+        'Date': ['2024-03-15', '2024-03-16', '2024-03-17', '2024-03-18', '2024-03-19', '2024-03-20'],
+        'Description': ['Test Transaction 1', 'Test Transaction 2', 'Test Transaction 3', 
+                       'Test Transaction 4', 'Test Transaction 5', 'Test Transaction 6'],
+        'Amount': ['-123.45', '-456.78', '-789.01', '-42.80', '-95.89', '-999.99'],
+        'Category': ['Test1', 'Test2', 'Test3', 'Test4', 'Test5', 'Test6'],
+        'Tags': [''] * 6,
+        'Account': ['Test Account'] * 6
+    })
+    
+    # Process all detail records
+    processed_discover = process_discover_format(discover_df)
+    processed_amex = process_amex_format(amex_df)
+    processed_capital_one = process_capital_one_format(capital_one_df)
+    processed_alliant = process_alliant_format(alliant_df)
+    processed_chase = process_chase_format(chase_df)
+    
+    # Combine all detail records
+    detail_records = [processed_discover, processed_amex, processed_capital_one, 
+                     processed_alliant, processed_chase]
+    
+    # Perform reconciliation
+    result = reconcile_transactions(aggregator_df, detail_records)
+    
+    # Verify matches and unmatched records
+    assert len(result) == 6, "Should have six records (five matches, one unmatched)"
+    assert result['Matched'].sum() == 5, "Should have five matched records"
+    assert len(result[result['reconciled_key'].str.startswith('U:')]) == 1, "Should have one unmatched record"
+    
+    # Verify each format was matched correctly
+    matched_amounts = result[result['Matched']]['Amount'].tolist()
+    assert -123.45 in matched_amounts, "Discover transaction not matched"
+    assert -456.78 in matched_amounts, "Amex transaction not matched"
+    assert -789.01 in matched_amounts, "Capital One transaction not matched"
+    assert -42.80 in matched_amounts, "Alliant transaction not matched"
+    assert -95.89 in matched_amounts, "Chase transaction not matched"
+    
+    # Verify source file tracking
+    assert all(result[result['Matched']]['Account'] == 'Test Account'), "Matched records should keep original account"
+    assert result[~result['Matched']]['Account'].iloc[0].startswith('Unreconciled -'), "Unmatched record should show source" 
