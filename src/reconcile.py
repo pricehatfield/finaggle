@@ -209,6 +209,42 @@ def clean_amount(amount_str):
     except:
         return 0.0
 
+def is_valid_amount(x):
+    """
+    Validate if a value can be converted to a float amount.
+    
+    Args:
+        x: Value to validate
+        
+    Returns:
+        bool: True if value can be converted to float, False otherwise
+        
+    Notes:
+        - Handles currency symbols ($)
+        - Handles commas in numbers
+        - Handles parentheses for negative numbers
+        - NaN values are considered invalid
+        - Empty strings are considered valid (for optional amounts)
+    """
+    if pd.isna(x):
+        return True  # Allow NaN values
+    if isinstance(x, (int, float)):
+        return True
+    if isinstance(x, str):
+        if x == '':
+            return True  # Allow empty strings
+        try:
+            # Remove currency symbols and commas
+            x = x.replace('$', '').replace(',', '')
+            # Handle parentheses for negative numbers
+            if x.startswith('(') and x.endswith(')'):
+                x = '-' + x[1:-1]
+            float(x)
+            return True
+        except:
+            return False
+    return False
+
 def process_discover_format(df):
     """
     Process Discover credit card transactions into standardized format.
@@ -229,15 +265,60 @@ def process_discover_format(df):
             - Amount: Numeric amount (negative for debits)
             - Category: Transaction category
             - source_file: Set to 'discover'
+            
+    Raises:
+        ValueError: If any required field is invalid or missing
     """
     result = df.copy()
     
+    # Validate required fields
+    if 'Description' not in df.columns or df['Description'].isna().any() or (df['Description'] == '').any():
+        raise ValueError("Description is required and cannot be empty")
+        
     # Handle both possible transaction date column names
     trans_date_col = 'Trans. Date' if 'Trans. Date' in df.columns else 'Transaction Date'
-    result['Transaction Date'] = result[trans_date_col].apply(standardize_date)
+    if trans_date_col not in df.columns:
+        raise ValueError(f"Missing required column: {trans_date_col}")
+        
+    if 'Post Date' not in df.columns:
+        raise ValueError("Missing required column: Post Date")
+        
+    if 'Amount' not in df.columns:
+        raise ValueError("Missing required column: Amount")
+        
+    # Validate amount format before cleaning
+    def is_valid_amount(x):
+        if pd.isna(x):
+            return False
+        try:
+            # Remove currency symbols and commas
+            if isinstance(x, str):
+                x = x.replace('$', '').replace(',', '')
+                # Handle parentheses for negative numbers
+                if x.startswith('(') and x.endswith(')'):
+                    x = '-' + x[1:-1]
+            float(x)
+            return True
+        except:
+            return False
+            
+    if not df['Amount'].apply(is_valid_amount).all():
+        raise ValueError("Invalid amount format")
     
+    # Validate dates
+    result['Transaction Date'] = result[trans_date_col].apply(standardize_date)
     result['Post Date'] = result['Post Date'].apply(standardize_date)
+    
+    if result['Transaction Date'].isna().any() or result['Post Date'].isna().any():
+        raise ValueError("Invalid date format")
+        
+    # Validate post date is not before transaction date
+    if (pd.to_datetime(result['Post Date']) < pd.to_datetime(result['Transaction Date'])).any():
+        raise ValueError("Post date cannot be before transaction date")
+    
+    # Clean amount
     result['Amount'] = result['Amount'].apply(clean_amount) * -1  # Convert to negative for debits
+    
     result['Description'] = result['Description'].str.strip()
     result['Category'] = result.get('Category', pd.Series('', index=result.index))
     result['source_file'] = result.get('source_file', pd.Series('discover', index=result.index))
@@ -264,12 +345,57 @@ def process_capital_one_format(df):
             - Amount: Numeric amount (negative for debits)
             - Category: Transaction category
             - source_file: Set to 'capital_one'
+            
+    Raises:
+        ValueError: If any required field is invalid or missing
     """
     result = df.copy()
+    
+    # Validate required fields
+    if 'Description' not in df.columns or df['Description'].isna().any() or (df['Description'] == '').any():
+        raise ValueError("Description is required and cannot be empty")
+        
+    if 'Transaction Date' not in df.columns:
+        raise ValueError("Missing required column: Transaction Date")
+        
+    if 'Posted Date' not in df.columns:
+        raise ValueError("Missing required column: Posted Date")
+        
+    if 'Debit' not in df.columns or 'Credit' not in df.columns:
+        raise ValueError("Missing required columns: Debit and/or Credit")
+        
+    # Validate amount format before cleaning
+    def is_valid_amount(x):
+        if pd.isna(x) or x == '':
+            return True  # Allow empty values for Debit/Credit columns
+        try:
+            # Remove currency symbols and commas
+            if isinstance(x, str):
+                x = x.replace('$', '').replace(',', '').strip()
+                # Handle parentheses for negative numbers
+                if x.startswith('(') and x.endswith(')'):
+                    x = '-' + x[1:-1]
+            # Try converting to float
+            float(x)
+            return True
+        except (ValueError, TypeError):
+            return False
+            
+    if not df['Debit'].apply(is_valid_amount).all() or not df['Credit'].apply(is_valid_amount).all():
+        raise ValueError("Invalid amount format")
+    
+    # Validate dates
     result['Transaction Date'] = result['Transaction Date'].apply(standardize_date)
     result['Post Date'] = result['Posted Date'].apply(standardize_date)
     
-    # Combine Debit and Credit columns into Amount
+    if result['Transaction Date'].isna().any() or result['Post Date'].isna().any():
+        raise ValueError("Invalid date format")
+        
+    # Validate post date is not before transaction date
+    if (pd.to_datetime(result['Post Date']) < pd.to_datetime(result['Transaction Date'])).any():
+        raise ValueError("Post date cannot be before transaction date")
+    
+    # Clean amount
     result['Amount'] = result.apply(
         lambda row: -clean_amount(row['Debit']) if pd.notna(row['Debit']) else clean_amount(row['Credit']),
         axis=1
@@ -302,11 +428,36 @@ def process_chase_format(df):
             - Amount: Numeric amount (negative for debits)
             - Category: Transaction category
             - source_file: Set to 'chase'
+            
+    Raises:
+        ValueError: If any required field is invalid or missing
     """
     result = df.copy()
+    
+    # Validate required fields
+    if 'Description' not in df.columns or df['Description'].isna().any() or (df['Description'] == '').any():
+        raise ValueError("Description is required and cannot be empty")
+        
+    if 'Posting Date' not in df.columns:
+        raise ValueError("Missing required column: Posting Date")
+        
+    if 'Amount' not in df.columns:
+        raise ValueError("Missing required column: Amount")
+        
+    # Validate amount format before cleaning
+    if not df['Amount'].apply(is_valid_amount).all():
+        raise ValueError("Invalid amount format")
+    
+    # Validate dates
     result['Transaction Date'] = result['Posting Date'].apply(standardize_date)  # Chase only provides posting date
     result['Post Date'] = result['Posting Date'].apply(standardize_date)
+    
+    if result['Transaction Date'].isna().any() or result['Post Date'].isna().any():
+        raise ValueError("Invalid date format")
+    
+    # Clean amount
     result['Amount'] = result['Amount'].apply(clean_amount)  # Chase amounts are already negative for debits
+    
     result['Description'] = result['Description'].str.strip()
     result['Category'] = result.get('Category', pd.Series('', index=result.index))
     result['source_file'] = result.get('source_file', pd.Series('chase', index=result.index))
@@ -332,12 +483,36 @@ def process_amex_format(df):
             - Amount: Numeric amount (negative for debits)
             - Category: Empty string (Amex doesn't provide categories)
             - source_file: Set to 'amex'
+            
+    Raises:
+        ValueError: If any required field is invalid or missing
     """
     result = df.copy()
     
+    # Validate required fields
+    if 'Description' not in df.columns or df['Description'].isna().any() or (df['Description'] == '').any():
+        raise ValueError("Description is required and cannot be empty")
+        
+    if 'Date' not in df.columns:
+        raise ValueError("Missing required column: Date")
+        
+    if 'Amount' not in df.columns:
+        raise ValueError("Missing required column: Amount")
+        
+    # Validate amount format before cleaning
+    if not df['Amount'].apply(is_valid_amount).all():
+        raise ValueError("Invalid amount format")
+    
+    # Validate dates
     result['Transaction Date'] = result['Date'].apply(standardize_date)
     result['Post Date'] = result['Transaction Date']  # Amex doesn't provide post date
+    
+    if result['Transaction Date'].isna().any():
+        raise ValueError("Invalid date format")
+    
+    # Clean amount
     result['Amount'] = result['Amount'].apply(clean_amount) * -1  # Convert to negative for debits
+    
     result['Description'] = result['Description'].str.strip()
     result['Category'] = ''  # Amex doesn't provide categories
     result['source_file'] = result.get('source_file', pd.Series('amex', index=result.index))
@@ -364,12 +539,36 @@ def process_aggregator_format(df):
             - Amount: Numeric amount (negative for debits)
             - Category: Transaction category
             - source_file: Set to 'empower'
+            
+    Raises:
+        ValueError: If any required field is invalid or missing
     """
     result = df.copy()
     
+    # Validate required fields
+    if 'Description' not in df.columns or df['Description'].isna().any() or (df['Description'] == '').any():
+        raise ValueError("Description is required and cannot be empty")
+        
+    if 'Date' not in df.columns:
+        raise ValueError("Missing required column: Date")
+        
+    if 'Amount' not in df.columns:
+        raise ValueError("Missing required column: Amount")
+        
+    # Validate amount format before cleaning
+    if not df['Amount'].apply(is_valid_amount).all():
+        raise ValueError("Invalid amount format")
+    
+    # Validate dates
     result['Transaction Date'] = result['Date'].apply(standardize_date)
     result['Post Date'] = result['Transaction Date']  # Empower doesn't provide post date
+    
+    if result['Transaction Date'].isna().any():
+        raise ValueError("Invalid date format")
+    
+    # Clean amount
     result['Amount'] = result['Amount'].apply(clean_amount) * -1  # Convert to negative for debits
+    
     result['Description'] = result['Description'].str.strip()
     result['Category'] = result.get('Category', pd.Series('', index=result.index))
     result['source_file'] = result.get('source_file', pd.Series('empower', index=result.index))
@@ -488,11 +687,36 @@ def process_alliant_checking_format(df):
             - Amount: Numeric amount (negative for debits)
             - Category: Transaction category
             - source_file: Set to 'alliant_checking'
+            
+    Raises:
+        ValueError: If any required field is invalid or missing
     """
     result = df.copy()
+    
+    # Validate required fields
+    if 'Description' not in df.columns or df['Description'].isna().any() or (df['Description'] == '').any():
+        raise ValueError("Description is required and cannot be empty")
+        
+    if 'Date' not in df.columns:
+        raise ValueError("Missing required column: Date")
+        
+    if 'Amount' not in df.columns:
+        raise ValueError("Missing required column: Amount")
+        
+    # Validate amount format before cleaning
+    if not df['Amount'].apply(is_valid_amount).all():
+        raise ValueError("Invalid amount format")
+    
+    # Validate dates
     result['Transaction Date'] = result['Date'].apply(standardize_date)
     result['Post Date'] = result['Date'].apply(standardize_date)  # Alliant only provides one date
+    
+    if result['Transaction Date'].isna().any():
+        raise ValueError("Invalid date format")
+    
+    # Clean amount
     result['Amount'] = result['Amount'].apply(clean_amount)  # Alliant amounts are already negative for debits
+    
     result['Description'] = result['Description'].str.strip()
     result['Category'] = result.get('Category', pd.Series('', index=result.index))
     result['source_file'] = result.get('source_file', pd.Series('alliant_checking', index=result.index))
@@ -508,7 +732,7 @@ def process_alliant_visa_format(df):
             - Description: Transaction description
             - Amount: Transaction amount (with $ and commas)
             - Balance: Account balance
-            - Type: Transaction type
+            - Post Date: Date the transaction posted
     
     Returns:
         pd.DataFrame: Standardized transaction data with columns:
@@ -518,11 +742,43 @@ def process_alliant_visa_format(df):
             - Amount: Numeric amount (negative for debits)
             - Category: Transaction category
             - source_file: Set to 'alliant_visa'
+            
+    Raises:
+        ValueError: If any required field is invalid or missing
     """
     result = df.copy()
+    
+    # Validate required fields
+    if 'Description' not in df.columns or df['Description'].isna().any() or (df['Description'] == '').any():
+        raise ValueError("Description is required and cannot be empty")
+        
+    if 'Date' not in df.columns:
+        raise ValueError("Missing required column: Date")
+        
+    if 'Amount' not in df.columns:
+        raise ValueError("Missing required column: Amount")
+        
+    if 'Post Date' not in df.columns:
+        raise ValueError("Missing required column: Post Date")
+        
+    # Validate amount format before cleaning
+    if not df['Amount'].apply(is_valid_amount).all():
+        raise ValueError("Invalid amount format")
+    
+    # Validate dates
     result['Transaction Date'] = result['Date'].apply(standardize_date)
-    result['Post Date'] = result['Date'].apply(standardize_date)  # Alliant only provides one date
-    result['Amount'] = result['Amount'].apply(clean_amount)  # Alliant amounts are already negative for debits
+    result['Post Date'] = result['Post Date'].apply(standardize_date)
+    
+    if result['Transaction Date'].isna().any() or result['Post Date'].isna().any():
+        raise ValueError("Invalid date format")
+        
+    # Validate post date is not before transaction date
+    if (pd.to_datetime(result['Post Date']) < pd.to_datetime(result['Transaction Date'])).any():
+        raise ValueError("Post date cannot be before transaction date")
+    
+    # Clean amount
+    result['Amount'] = result['Amount'].apply(clean_amount)  # Alliant Visa amounts are already positive for debits
+    
     result['Description'] = result['Description'].str.strip()
     result['Category'] = result.get('Category', pd.Series('', index=result.index))
     result['source_file'] = result.get('source_file', pd.Series('alliant_visa', index=result.index))
