@@ -39,44 +39,34 @@ from src.utils import ensure_directory, create_output_directories
 
 logger = logging.getLogger(__name__)
 
-def setup_logging(log_level=logging.ERROR):
+def setup_logging():
     """
-    Configure logging to output to both file and console with different levels.
+    Set up logging configuration.
     
-    Args:
-        log_level (int): Minimum logging level for console output. Defaults to ERROR.
-                        File logging is always set to DEBUG.
-    
-    Returns:
-        None
-    
-    Side Effects:
-        - Creates a logs directory if it doesn't exist
-        - Sets up console and file handlers
-        - Configures logging format
+    Uses LOG_FILE environment variable to determine log file location.
+    If LOG_FILE is not set, logs to stderr.
     """
-    logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
-    
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    
-    # Console handler - set to WARNING or user specified level
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    console_handler.setLevel(max(logging.WARNING, log_level))
-    logger.addHandler(console_handler)
-    
-    # File handler - always set to DEBUG for diagnostics
-    workspace_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    log_dir = os.path.join(workspace_root, "logs")
-    os.makedirs(log_dir, exist_ok=True)
-    
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = os.path.join(log_dir, f"reconciliation_{timestamp}.log")
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(logging.DEBUG)
-    logger.addHandler(file_handler)
+    log_file = os.getenv('LOG_FILE')
+    if log_file:
+        # Ensure log directory exists
+        log_dir = os.path.dirname(log_file)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+            
+        logging.basicConfig(
+            filename=log_file,
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        
+        # Create an empty log file if it doesn't exist
+        if not os.path.exists(log_file):
+            open(log_file, 'a').close()
+    else:
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
 
 def standardize_date(date_str):
     """
@@ -402,7 +392,7 @@ def process_amex_format(df):
     return result
 
 def process_aggregator_format(df):
-    """Process Aggregator (Empower) format transactions.
+    """Process aggregator format transactions.
     
     Args:
         df (pd.DataFrame): Raw transaction data
@@ -416,9 +406,13 @@ def process_aggregator_format(df):
     # Create result DataFrame with standardized columns
     result = pd.DataFrame()
     
-    # Map date columns
-    result['Transaction Date'] = df['Date'].apply(standardize_date)
-    result['Post Date'] = df['Date'].apply(standardize_date)  # Aggregator only provides transaction date
+    # Map date columns - handle both 'Date' and 'Transaction Date'/'Post Date' cases
+    if 'Date' in df.columns:
+        result['Transaction Date'] = df['Date'].apply(standardize_date)
+        result['Post Date'] = df['Date'].apply(standardize_date)  # Use same date for both
+    else:
+        result['Transaction Date'] = df['Transaction Date'].apply(standardize_date)
+        result['Post Date'] = df['Post Date'].apply(standardize_date)
     
     # Validate dates
     if result['Transaction Date'].isna().any():
@@ -429,14 +423,20 @@ def process_aggregator_format(df):
     # Map description
     result['Description'] = df['Description'].apply(standardize_description)
     
-    # Convert amount to float (Aggregator amounts are already correctly signed)
+    # Convert amount to float
     result['Amount'] = df['Amount'].apply(clean_amount)
     
     # Map category
     result['Category'] = df['Category'].apply(standardize_category)
     
+    # Preserve additional metadata
+    if 'Tags' in df.columns:
+        result['Tags'] = df['Tags']
+    if 'Account' in df.columns:
+        result['Account'] = df['Account']
+    
     # Add source file information
-    result['source_file'] = 'aggregator'
+    result['source_file'] = df.get('source_file', 'aggregator')
     
     return result
 
@@ -630,50 +630,63 @@ def reconcile_transactions(aggregator_df, detail_records):
     # Process all detail records into standardized format
     processed_details = []
     for df in detail_records:
-        if 'Transaction Date' in df.columns and 'Post Date' in df.columns:
-            processed_details.append(process_date_format(df))
-        elif 'Post Date' in df.columns:
-            processed_details.append(process_post_date_format(df))
-        elif 'Debit' in df.columns and 'Credit' in df.columns:
-            processed_details.append(process_debit_credit_format(df))
+        if not {'Transaction Date', 'Post Date', 'Description', 'Amount', 'Category'}.issubset(df.columns):
+            if 'Transaction Date' in df.columns and 'Post Date' in df.columns:
+                processed_details.append(process_date_format(df))
+            elif 'Post Date' in df.columns:
+                processed_details.append(process_post_date_format(df))
+            elif 'Debit' in df.columns and 'Credit' in df.columns:
+                processed_details.append(process_debit_credit_format(df))
+            else:
+                processed_details.append(process_aggregator_format(df))
         else:
-            processed_details.append(process_aggregator_format(df))
+            processed_details.append(df)
     
     # Combine all detail records
     detail_df = pd.concat(processed_details, ignore_index=True)
     
-    # Process aggregator data
-    aggregator_df = process_aggregator_format(aggregator_df)
+    # Process aggregator data if not already in standardized format
+    if not {'Transaction Date', 'Post Date', 'Description', 'Amount', 'Category'}.issubset(aggregator_df.columns):
+        aggregator_df = process_aggregator_format(aggregator_df)
     
     # Find matches
     matches = []
     unmatched_aggregator = []
     unmatched_detail = []
     
+    # Track which detail records have been matched to avoid duplicate matches
+    matched_detail_indices = set()
+    
     # Match by post date
     for _, agg_row in aggregator_df.iterrows():
-        detail_matches = detail_df[
+        # Find all potential matches
+        potential_matches = detail_df[
             (detail_df['Post Date'] == agg_row['Post Date']) &
             (detail_df['Amount'] == agg_row['Amount'])
         ]
         
-        if len(detail_matches) > 0:
-            for _, detail_row in detail_matches.iterrows():
-                matches.append({
-                    'Transaction Date': detail_row['Transaction Date'],
-                    'Post Date': agg_row['Post Date'],
-                    'Description': detail_row['Description'],
-                    'Amount': agg_row['Amount'],
-                    'Category': detail_row['Category'],
-                    'source_file': detail_row['source_file'],
-                    'match_type': 'P'  # Post date match
-                })
+        # Filter out already matched records
+        available_matches = potential_matches[~potential_matches.index.isin(matched_detail_indices)]
+        
+        if len(available_matches) > 0:
+            # Take the first available match
+            detail_row = available_matches.iloc[0]
+            matches.append({
+                'Transaction Date': detail_row['Transaction Date'],
+                'Post Date': agg_row['Post Date'],
+                'Description': detail_row['Description'],
+                'Amount': agg_row['Amount'],
+                'Category': detail_row['Category'],
+                'source_file': detail_row.get('source_file', 'unknown'),
+                'match_type': 'P'  # Post date match
+            })
+            matched_detail_indices.add(detail_row.name)
         else:
             unmatched_aggregator.append(agg_row)
     
-    # Match by transaction date
+    # Match by transaction date for unmatched detail records
     for _, detail_row in detail_df.iterrows():
-        if detail_row['Transaction Date'] is not None:
+        if detail_row.name not in matched_detail_indices and detail_row['Transaction Date'] is not None:
             agg_matches = aggregator_df[
                 (aggregator_df['Transaction Date'] == detail_row['Transaction Date']) &
                 (aggregator_df['Amount'] == detail_row['Amount'])
@@ -755,36 +768,44 @@ def import_csv(file_path):
 
 def import_folder(folder_path):
     """
-    Import all CSV files from a folder and combine them into a single DataFrame.
+    Import all CSV files from a folder.
     
     Args:
-        folder_path (str): Path to the folder containing CSV files
-    
+        folder_path (str or Path): Path to folder containing CSV files
+        
     Returns:
-        pd.DataFrame: Combined DataFrame containing all imported data
+        list: List of DataFrames containing standardized transaction data
+        
+    Raises:
+        FileNotFoundError: If folder does not exist
+        ValueError: If no CSV files found or if any file cannot be processed
     """
     logger.info(f"Importing folder: {folder_path}")
     
-    try:
-        files = [f for f in os.listdir(folder_path) if f.endswith('.csv')]
-    except Exception as e:
-        logger.error(f"Error listing files in folder {folder_path}: {e}")
-        raise
+    # Convert to Path object if string
+    if isinstance(folder_path, str):
+        folder_path = pathlib.Path(folder_path)
     
-    dfs = []
-    for file in files:
+    # Check if folder exists
+    if not folder_path.exists():
+        raise FileNotFoundError(f"Folder not found: {folder_path}")
+    
+    # Find all CSV files
+    csv_files = list(folder_path.glob('*.csv'))
+    if not csv_files:
+        raise ValueError(f"No CSV files found in {folder_path}")
+    
+    # Import each file
+    results = []
+    for file_path in csv_files:
         try:
-            df = import_csv(os.path.join(folder_path, file))
-            dfs.append(df)
+            df = import_csv(file_path)
+            results.append(df)
         except Exception as e:
-            logger.error(f"Error importing file {file}: {e}")
-            continue
+            logger.error(f"Error importing {file_path}: {str(e)}")
+            raise ValueError(f"Error importing {file_path}: {str(e)}")
     
-    if not dfs:
-        logger.warning(f"No valid CSV files found in {folder_path}")
-        return pd.DataFrame()
-    
-    return pd.concat(dfs, ignore_index=True)
+    return results
 
 def export_reconciliation(results_df, output_path):
     """

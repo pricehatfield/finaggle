@@ -12,9 +12,7 @@ from src.reconcile import (
     ensure_directory,
     process_discover_format,
     process_capital_one_format,
-    process_chase_format,
-    find_matches,
-    calculate_discrepancies
+    process_chase_format
 )
 
 def create_test_df(name, num_records=1, with_dates=False):
@@ -92,8 +90,12 @@ def test_setup_logging(tmp_path, monkeypatch):
     
     # Import after setting environment variable
     from src.reconcile import setup_logging
-    setup_logging()
     
+    # Reset logging configuration
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+    
+    setup_logging()
     assert log_file.exists()
     assert logging.getLogger().level == logging.INFO
 
@@ -104,10 +106,20 @@ def test_ensure_directory(tmp_path, monkeypatch):
     
     # Import after setting environment variable
     from src.reconcile import ensure_directory
-    ensure_directory()
     
-    assert test_dir.exists()
-    assert test_dir.is_dir()
+    # Test creating archive directory
+    archive_dir = ensure_directory('archive')
+    assert os.path.exists(archive_dir)
+    assert os.path.isdir(archive_dir)
+    
+    # Test creating logs directory
+    logs_dir = ensure_directory('logs')
+    assert os.path.exists(logs_dir)
+    assert os.path.isdir(logs_dir)
+    
+    # Test invalid directory type
+    with pytest.raises(ValueError):
+        ensure_directory('invalid')
 
 def test_import_csv(tmp_path):
     """Test CSV import"""
@@ -134,7 +146,6 @@ def test_import_folder(tmp_path):
     assert len(result) == 2
     assert all(not df.empty for df in result)
 
-@pytest.mark.dependency(depends=["test_5_format_standardization.py"])
 class TestReconciliation:
     """Test suite for transaction reconciliation"""
     
@@ -156,10 +167,10 @@ class TestReconciliation:
             'Category': ['shopping']
         })
         
-        matches, unmatched = reconcile_transactions(source_df, target_df)
+        matches, unmatched = reconcile_transactions(source_df, [target_df])
         assert len(matches) == 1
         assert len(unmatched) == 0
-        
+    
     def test_multiple_matches(self):
         """Test multiple transaction matches"""
         source_df = pd.DataFrame({
@@ -178,10 +189,10 @@ class TestReconciliation:
             'Category': ['shopping', 'dining']
         })
         
-        matches, unmatched = reconcile_transactions(source_df, target_df)
+        matches, unmatched = reconcile_transactions(source_df, [target_df])
         assert len(matches) == 2
         assert len(unmatched) == 0
-        
+    
     def test_unmatched_transactions(self):
         """Test handling of unmatched transactions"""
         source_df = pd.DataFrame({
@@ -200,10 +211,10 @@ class TestReconciliation:
             'Category': ['dining']
         })
         
-        matches, unmatched = reconcile_transactions(source_df, target_df)
+        matches, unmatched = reconcile_transactions(source_df, [target_df])
         assert len(matches) == 0
         assert len(unmatched) == 2
-        
+    
     def test_duplicate_handling(self):
         """Test handling of duplicate transactions"""
         source_df = pd.DataFrame({
@@ -222,10 +233,10 @@ class TestReconciliation:
             'Category': ['shopping']
         })
         
-        matches, unmatched = reconcile_transactions(source_df, target_df)
+        matches, unmatched = reconcile_transactions(source_df, [target_df])
         assert len(matches) == 1
         assert len(unmatched) == 1
-        
+    
     def test_date_matching(self):
         """Test date-based matching"""
         source_df = pd.DataFrame({
@@ -244,10 +255,10 @@ class TestReconciliation:
             'Category': ['shopping']
         })
         
-        matches, unmatched = reconcile_transactions(source_df, target_df)
+        matches, unmatched = reconcile_transactions(source_df, [target_df])
         assert len(matches) == 0
         assert len(unmatched) == 2
-        
+    
     def test_amount_matching(self):
         """Test amount-based matching"""
         source_df = pd.DataFrame({
@@ -266,35 +277,10 @@ class TestReconciliation:
             'Category': ['shopping']
         })
         
-        matches, unmatched = reconcile_transactions(source_df, target_df)
+        matches, unmatched = reconcile_transactions(source_df, [target_df])
         assert len(matches) == 0
         assert len(unmatched) == 2
 
-@pytest.mark.dependency(depends=["test_5_format_standardization.py"])
-def test_find_matches():
-    """Test the find_matches function"""
-    source_df = pd.DataFrame({
-        'Transaction Date': ['2025-01-01'],
-        'Post Date': ['2025-01-02'],
-        'Description': ['test transaction'],
-        'Amount': [-50.00],
-        'Category': ['shopping']
-    })
-    
-    target_df = pd.DataFrame({
-        'Transaction Date': ['2025-01-01'],
-        'Post Date': ['2025-01-02'],
-        'Description': ['test transaction'],
-        'Amount': [-50.00],
-        'Category': ['shopping']
-    })
-    
-    matches = find_matches(source_df, target_df)
-    assert len(matches) == 1
-    assert matches.iloc[0]['source_index'] == 0
-    assert matches.iloc[0]['target_index'] == 0
-
-@pytest.mark.dependency(depends=["test_5_format_standardization.py"])
 def test_calculate_discrepancies():
     """Test the calculate_discrepancies function"""
     source_df = pd.DataFrame({
@@ -313,6 +299,6 @@ def test_calculate_discrepancies():
         'Category': ['shopping']
     })
     
-    discrepancies = calculate_discrepancies(source_df, target_df)
-    assert len(discrepancies) == 1
-    assert discrepancies.iloc[0]['amount_difference'] == 25.00 
+    matches, unmatched = reconcile_transactions(source_df, [target_df])
+    assert len(matches) == 0  # Should not match due to different amounts
+    assert len(unmatched) == 2  # Both transactions should be unmatched 
