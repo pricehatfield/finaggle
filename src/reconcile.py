@@ -35,6 +35,7 @@ import logging
 import pathlib
 import re
 import csv
+from src.utils import ensure_directory, create_output_directories
 
 logger = logging.getLogger(__name__)
 
@@ -76,27 +77,6 @@ def setup_logging(log_level=logging.ERROR):
     file_handler.setFormatter(formatter)
     file_handler.setLevel(logging.DEBUG)
     logger.addHandler(file_handler)
-
-def ensure_directory(dir_type):
-    """
-    Verify a directory exists and create it if necessary.
-    
-    Args:
-        dir_type (str): Type of directory ("archive" or "logs")
-    
-    Returns:
-        str: Full path to the directory
-    
-    Raises:
-        ValueError: If dir_type is not "archive" or "logs"
-    """
-    if dir_type not in ["archive", "logs"]:
-        raise ValueError("dir_type must be 'archive' or 'logs'")
-        
-    script_dir = pathlib.Path(__file__).parent.absolute()
-    target_dir = os.path.join(script_dir, dir_type)
-    pathlib.Path(target_dir).mkdir(parents=True, exist_ok=True)
-    return target_dir
 
 def standardize_date(date_str):
     """
@@ -317,7 +297,7 @@ def process_discover_format(df):
         raise ValueError("Post date cannot be before transaction date")
     
     # Clean amount
-    result['Amount'] = result['Amount'].apply(clean_amount) * -1  # Convert to negative for debits
+    result['Amount'] = result['Amount'].apply(clean_amount)  # Discover amounts are already negative for debits
     
     result['Description'] = result['Description'].str.strip()
     result['Category'] = result.get('Category', pd.Series('', index=result.index))
@@ -777,7 +757,11 @@ def process_alliant_visa_format(df):
         raise ValueError("Post date cannot be before transaction date")
     
     # Clean amount
-    result['Amount'] = result['Amount'].apply(clean_amount)  # Alliant Visa amounts are already positive for debits
+    print(f"Original amount: {result['Amount'].values}")
+    result['Amount'] = result['Amount'].apply(clean_amount)
+    print(f"After clean_amount: {result['Amount'].values}")
+    result['Amount'] = result['Amount'] * -1  # Convert to negative for debits
+    print(f"After negation: {result['Amount'].values}")
     
     result['Description'] = result['Description'].str.strip()
     result['Category'] = result.get('Category', pd.Series('', index=result.index))
@@ -877,6 +861,7 @@ def import_csv(file_path):
     
     # Read the CSV file
     df = pd.read_csv(file_path)
+    print(f"\nColumns in CSV: {df.columns.tolist()}")
     
     # Determine the format based on column names
     columns = set(df.columns)
@@ -884,38 +869,47 @@ def import_csv(file_path):
     # Discover format
     if {'Trans. Date', 'Post Date', 'Description', 'Amount'}.issubset(columns) or \
        {'Transaction Date', 'Post Date', 'Description', 'Amount'}.issubset(columns):
+        print("Detected Discover format")
         return process_discover_format(df)
     
     # Capital One format
     if {'Transaction Date', 'Posted Date', 'Description', 'Debit', 'Credit'}.issubset(columns):
+        print("Detected Capital One format")
         return process_capital_one_format(df)
     
     # Chase format
     if {'Posting Date', 'Description', 'Amount', 'Type', 'Balance', 'Check or Slip #'}.issubset(columns):
+        print("Detected Chase format")
         return process_chase_format(df)
+    
+    # Alliant Visa format
+    if {'Date', 'Description', 'Amount', 'Balance', 'Post Date'}.issubset(columns):
+        print("Detected Alliant Visa format")
+        return process_alliant_visa_format(df)
     
     # Alliant Checking format
     if {'Date', 'Description', 'Amount', 'Balance'}.issubset(columns):
+        print("Detected Alliant Checking format")
         return process_alliant_checking_format(df)
-    
-    # Alliant Visa format
-    if {'Date', 'Description', 'Amount', 'Balance', 'Type'}.issubset(columns):
-        return process_alliant_visa_format(df)
     
     # Amex format
     if {'Date', 'Description', 'Card Member', 'Account #', 'Amount'}.issubset(columns):
+        print("Detected Amex format")
         return process_amex_format(df)
     
     # Aggregator format
     if {'Date', 'Description', 'Amount', 'Category'}.issubset(columns):
+        print("Detected Aggregator format")
         return process_aggregator_format(df)
     
     # Post date format
     if {'Post Date', 'Description', 'Amount'}.issubset(columns):
+        print("Detected Post Date format")
         return process_post_date_format(df)
     
     # Transaction date format
     if {'Transaction Date', 'Description', 'Amount'}.issubset(columns):
+        print("Detected Transaction Date format")
         return process_date_format(df)
     
     raise ValueError(f"Could not determine format for file: {file_path}\nColumns: {columns}")

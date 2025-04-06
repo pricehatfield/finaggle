@@ -26,7 +26,7 @@ from src.reconcile import (
     process_aggregator_format
 )
 
-@pytest.mark.dependency(depends=["TestDateStandardization::test_iso_format", "TestAmountCleaning::test_positive_amounts"])
+@pytest.mark.dependency(depends=["test_1_utils.py::TestDateStandardization::test_iso_format", "test_1_utils.py::TestAmountCleaning::test_positive_amounts"])
 class TestFormatValidation:
     """Test suite for format validation"""
     

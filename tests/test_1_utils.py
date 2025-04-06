@@ -1,7 +1,9 @@
 import pytest
 import pandas as pd
 import numpy as np
+import os
 from src.reconcile import standardize_date, clean_amount
+from src.utils import ensure_directory, create_output_directories
 
 @pytest.mark.dependency()
 class TestDateStandardization:
@@ -70,4 +72,43 @@ class TestAmountCleaning:
         assert clean_amount('0.00') == 0.0
         assert clean_amount('0') == 0.0
         assert clean_amount('0.0') == 0.0
-        assert clean_amount('00.00') == 0.0 
+        assert clean_amount('00.00') == 0.0
+
+@pytest.mark.dependency()
+class TestDirectoryOperations:
+    """Test suite for directory operations"""
+    
+    @pytest.mark.dependency()
+    def test_ensure_directory(self, tmp_path):
+        """Test directory creation and validation"""
+        # Test creating archive directory
+        archive_dir = ensure_directory("archive")
+        assert os.path.exists(archive_dir)
+        assert os.path.isdir(archive_dir)
+        
+        # Test creating logs directory
+        logs_dir = ensure_directory("logs")
+        assert os.path.exists(logs_dir)
+        assert os.path.isdir(logs_dir)
+        
+        # Test invalid directory type
+        with pytest.raises(ValueError):
+            ensure_directory("invalid")
+    
+    @pytest.mark.dependency(depends=["TestDirectoryOperations::test_ensure_directory"])
+    def test_create_output_directories(self, tmp_path):
+        """Test output directory creation"""
+        output_dir = tmp_path / "output"
+        create_output_directories(output_dir)
+        
+        # Check that directories were created
+        assert os.path.exists(output_dir)
+        assert os.path.exists(output_dir / "reconciled")
+        assert os.path.exists(output_dir / "unmatched")
+        
+        # Test with string path
+        str_output_dir = str(tmp_path / "output2")
+        create_output_directories(str_output_dir)
+        assert os.path.exists(str_output_dir)
+        assert os.path.exists(os.path.join(str_output_dir, "reconciled"))
+        assert os.path.exists(os.path.join(str_output_dir, "unmatched")) 
