@@ -694,7 +694,7 @@ def reconcile_transactions(aggregator_df, detail_records):
                 'Amount': agg_row['Amount'],
                 'Category': detail_row['Category'],
                 'source_file': detail_row.get('source_file', 'unknown'),
-                'match_type': 'P'  # Post date match
+                'match_type': 'post_date_amount'  # Post date and amount match
             })
             matched_detail_indices.add(detail_row.name)
         else:
@@ -708,7 +708,20 @@ def reconcile_transactions(aggregator_df, detail_records):
                 (aggregator_df['Amount'] == detail_row['Amount'])
             ]
             
-            if len(agg_matches) == 0:
+            if len(agg_matches) > 0:
+                # Take the first available match
+                agg_row = agg_matches.iloc[0]
+                matches.append({
+                    'Transaction Date': detail_row['Transaction Date'],
+                    'Post Date': detail_row['Post Date'],
+                    'Description': detail_row['Description'],
+                    'Amount': detail_row['Amount'],
+                    'Category': detail_row['Category'],
+                    'source_file': detail_row.get('source_file', 'unknown'),
+                    'match_type': 'transaction_date_amount'  # Transaction date and amount match
+                })
+                matched_detail_indices.add(detail_row.name)
+            else:
                 unmatched_detail.append(detail_row)
     
     # Convert to DataFrames
@@ -755,9 +768,15 @@ def import_csv(file_path):
     elif 'Date' in df.columns and 'Balance' in df.columns:
         logger.debug("Detected Alliant Checking format")
         return process_alliant_checking_format(df)
+    elif 'Date' in df.columns and 'Card Member' in df.columns and 'Account #' in df.columns:
+        logger.debug("Detected Amex format")
+        return process_amex_format(df)
     elif 'Date' in df.columns and 'Category' in df.columns:
         logger.debug("Detected Aggregator format")
         return process_aggregator_format(df)
+    elif all(col in df.columns for col in ['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']):
+        logger.debug("Detected standardized format")
+        return df
     else:
         raise ValueError(f"Unknown format in {file_path}. Columns: {df.columns.tolist()}")
 

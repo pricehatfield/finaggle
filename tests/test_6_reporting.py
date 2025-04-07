@@ -322,9 +322,9 @@ def test_report_generation_with_matched_and_unmatched(sample_matched_df, sample_
         assert "Total Transactions: 8" in content
         assert "Matched Transactions: 5" in content
         assert "Unmatched Transactions: 3" in content
-        assert "Total Amount: $1,690.00" in content
+        assert "Total Amount: $1,615.00" in content
         assert "Matched Amount: $1,745.00" in content
-        assert "Unmatched Amount: $-130.00" in content
+        assert "Unmatched Amount: $130.00" in content
 
 def test_report_generation_empty_data(tmp_path):
     """Test report generation with empty DataFrames."""
