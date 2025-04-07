@@ -40,7 +40,7 @@ A Python package for reconciling financial transactions across multiple sources.
 - **Columns**:
   - `Date`: MM/DD/YYYY
   - `Description`: String
-  - `Amount`: Decimal (positive for credits, negative for debits)
+  - `Amount`: String (with $ symbol, positive for credits, negative for debits)
   - `Balance`: Decimal
 
 ### Alliant Visa
@@ -48,7 +48,7 @@ A Python package for reconciling financial transactions across multiple sources.
 - **Columns**:
   - `Date`: MM/DD/YYYY
   - `Description`: String
-  - `Amount`: Decimal (positive for debits, negative for credits)
+  - `Amount`: String (with $ symbol, positive for credits, negative for debits)
   - `Balance`: Decimal
   - `Post Date`: MM/DD/YYYY
 

@@ -72,17 +72,15 @@ def create_test_format_data(format_name):
         return pd.DataFrame({
             'Date': ['03/17/2025'],
             'Description': ['AMAZON.COM'],
-            'Amount': ['$123.45'],
-            'Category': ['Shopping'],
+            'Amount': ['$40.33'],
             'source_file': ['alliant_checking_test.csv']
         })
     elif format_name == 'alliant_visa':
         return pd.DataFrame({
             'Date': ['03/17/2025'],
             'Description': ['AMAZON.COM'],
-            'Amount': ['$123.45'],
+            'Amount': ['$40.33'],
             'Post Date': ['03/18/2025'],
-            'Category': ['Shopping'],
             'source_file': ['alliant_visa_test.csv']
         })
     elif format_name == 'amex':
