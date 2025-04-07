@@ -11,15 +11,18 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def setup_logging():
+def setup_logging(log_level=logging.INFO):
     """
     Set up logging configuration.
+    
+    Args:
+        log_level (int): Logging level (default: logging.INFO)
     
     Uses LOG_FILE environment variable to determine log file location.
     If LOG_FILE is not set, logs to stderr.
     """
-    # Set root logger level to INFO
-    logging.getLogger().setLevel(logging.INFO)
+    # Set root logger level
+    logging.getLogger().setLevel(log_level)
     
     log_file = os.getenv('LOG_FILE')
     if log_file:
@@ -30,7 +33,7 @@ def setup_logging():
             
         logging.basicConfig(
             filename=log_file,
-            level=logging.INFO,
+            level=log_level,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
         
@@ -39,7 +42,7 @@ def setup_logging():
             open(log_file, 'a').close()
     else:
         logging.basicConfig(
-            level=logging.INFO,
+            level=log_level,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
 

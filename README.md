@@ -58,8 +58,8 @@ A Python package for reconciling financial transactions across multiple sources.
   - `Date`: MM/DD/YYYY
   - `Description`: String
   - `Card Member`: String
-  - `Account #`: String
-  - `Amount`: Decimal (positive for debits, negative for credits)
+  - `Account #`: Integer
+  - `Amount`: Decimal (positive for charges, negative for payments/credits)
 
 ### Aggregator (Empower)
 - **File Pattern**: `empower_*.csv`

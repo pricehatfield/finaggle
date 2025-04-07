@@ -36,8 +36,19 @@ import pathlib
 import re
 import csv
 from src.utils import ensure_directory, create_output_directories, setup_logging
+import argparse
 
 logger = logging.getLogger(__name__)
+
+# Required columns for standardized output
+required_columns = [
+    'Transaction Date',
+    'Post Date',
+    'Description',
+    'Amount',
+    'Category',
+    'source_file'
+]
 
 def standardize_date(date_str):
     """
@@ -323,19 +334,22 @@ def process_chase_format(df):
     
     return result
 
-def process_amex_format(df):
-    """Process American Express format transactions.
+def process_amex_format(df, source_file=None):
+    """Process American Express format.
     
     Args:
-        df (pd.DataFrame): Raw transaction data
-        
+        df (pd.DataFrame): DataFrame with Amex format
+        source_file (str, optional): Source file name. Defaults to None.
+    
     Returns:
-        pd.DataFrame: Standardized transaction data
-        
-    Raises:
-        ValueError: If any required field is invalid or missing
+        pd.DataFrame: Standardized DataFrame with required columns
     """
-    # Create result DataFrame with standardized columns
+    # Validate required columns
+    required_cols = ['Date', 'Description', 'Card Member', 'Account #', 'Amount']
+    if not all(col in df.columns for col in required_cols):
+        raise ValueError(f"Missing required columns. Expected: {required_cols}")
+    
+    # Create result DataFrame
     result = pd.DataFrame()
     
     # Map date columns
@@ -351,14 +365,16 @@ def process_amex_format(df):
     # Map description
     result['Description'] = df['Description'].apply(standardize_description)
     
-    # Convert amount to float and ensure debits are negative
-    result['Amount'] = df['Amount'].apply(clean_amount).apply(lambda x: -abs(x) if x > 0 else x)
+    # Convert amount to float and ensure debits are positive
+    result['Amount'] = df['Amount'].apply(clean_amount)
     
-    # Map category
-    result['Category'] = df['Category'].apply(standardize_category)
+    # Add metadata
+    result['Card Member'] = df['Card Member']
+    result['Account #'] = df['Account #']
     
-    # Add source file information
-    result['source_file'] = 'amex'
+    # Add category and source file
+    result['Category'] = 'Uncategorized'
+    result['source_file'] = source_file if source_file else 'amex'
     
     return result
 
@@ -552,42 +568,55 @@ def process_alliant_checking_format(df, source_file=None):
     return result
 
 def process_alliant_visa_format(df, source_file=None):
-    """Process Alliant visa format.
-    
-    Args:
-        df (pd.DataFrame): DataFrame with Alliant visa format
-        source_file (str, optional): Source file name. Defaults to None.
-    
-    Returns:
-        pd.DataFrame: Standardized DataFrame with required columns
-    """
+    """Process Alliant visa format."""
+    logger.debug("Processing Alliant visa format")
+    logger.debug(f"Input DataFrame:\n{df.head()}")
+    logger.debug(f"Data types:\n{df.dtypes}")
+
     # Validate required columns
     required_cols = ['Date', 'Description', 'Amount', 'Post Date']
     if not all(col in df.columns for col in required_cols):
+        logger.error(f"Missing required columns. Expected: {required_cols}")
         raise ValueError(f"Missing required columns. Expected: {required_cols}")
     
     # Validate description is not empty
     if df['Description'].isna().any() or (df['Description'] == '').any():
+        logger.error("Description cannot be empty")
         raise ValueError("Description cannot be empty")
     
-    # Convert amount to float, removing $ symbol
+    # Convert amount to float, handling parentheses and $ symbol
     try:
-        df['Amount'] = df['Amount'].str.replace('$', '').astype(float)
-    except (ValueError, TypeError):
-        raise ValueError("Invalid amount format")
+        if df['Amount'].dtype == 'object':  # If it's a string
+            logger.debug("Converting Amount from string to float")
+            # Remove $ and commas
+            amounts = df['Amount'].str.replace('$', '').str.replace(',', '')
+            # Handle parentheses by making those numbers negative
+            amounts = amounts.apply(lambda x: float(x.replace('(', '-').replace(')', '')) if isinstance(x, str) else float(x))
+            df['Amount'] = amounts
+        else:  # If it's already a float
+            logger.debug("Amount is already float type")
+            df['Amount'] = df['Amount'].astype(float)
+    except (ValueError, TypeError) as e:
+        logger.error(f"Invalid amount format: {e}")
+        raise ValueError(f"Invalid amount format: {e}")
     
-    # Make debits negative
+    # Make debits negative (they're already negative if in parentheses)
     df['Amount'] = -df['Amount']
+    logger.debug(f"Amounts after conversion:\n{df['Amount'].head()}")
     
     # Validate dates
     try:
         trans_dates = pd.to_datetime(df['Date'])
         post_dates = pd.to_datetime(df['Post Date'])
-    except (ValueError, TypeError):
-        raise ValueError("Invalid date format")
+        logger.debug(f"Transaction dates:\n{trans_dates.head()}")
+        logger.debug(f"Post dates:\n{post_dates.head()}")
+    except (ValueError, TypeError) as e:
+        logger.error(f"Invalid date format: {e}")
+        raise ValueError(f"Invalid date format: {e}")
     
     # Validate post date is not before transaction date
     if (post_dates < trans_dates).any():
+        logger.error("Post date cannot be before transaction date")
         raise ValueError("Post date cannot be before transaction date")
     
     # Standardize column names and add required columns
@@ -600,6 +629,7 @@ def process_alliant_visa_format(df, source_file=None):
         'source_file': source_file if source_file else 'unknown'
     })
     
+    logger.debug(f"Output DataFrame:\n{result.head()}")
     return result
 
 def reconcile_transactions(aggregator_df, detail_records):
@@ -693,64 +723,43 @@ def reconcile_transactions(aggregator_df, detail_records):
 
 def import_csv(file_path):
     """
-    Import a CSV file and detect its format.
+    Import CSV file and detect format based on columns.
     
     Args:
-        file_path (str or Path): Path to the CSV file
+        file_path (str): Path to CSV file
         
     Returns:
         pd.DataFrame: Standardized transaction data
-        
-    Raises:
-        FileNotFoundError: If the file does not exist
-        pd.errors.EmptyDataError: If the file is empty
-        ValueError: If file format cannot be detected or processed
     """
     logger.debug(f"Importing CSV file: {file_path}")
-
-    # Read CSV file
-    try:
-        df = pd.read_csv(file_path)
-    except FileNotFoundError:
-        raise  # Let FileNotFoundError pass through
-    except pd.errors.EmptyDataError:
-        raise  # Let EmptyDataError pass through
-    except Exception as e:
-        raise ValueError(f"Error reading CSV file: {str(e)}")
-
-    logger.debug(f"Columns in CSV: {df.columns}")
-
-    # Normalize column names
-    df.columns = df.columns.str.strip()
     
-    # Handle both 'Trans. Date' and 'Transaction Date'
-    if 'Transaction Date' in df.columns and 'Trans. Date' not in df.columns:
-        df['Trans. Date'] = df['Transaction Date']
-
+    # Read CSV file
+    df = pd.read_csv(file_path)
+    logger.debug(f"Columns found: {df.columns.tolist()}")
+    logger.debug(f"Data types:\n{df.dtypes}")
+    logger.debug(f"First row:\n{df.iloc[0]}")
+    
     # Detect format based on columns
-    if all(col in df.columns for col in ['Trans. Date', 'Post Date', 'Description', 'Amount']):
+    if 'Trans. Date' in df.columns:
         logger.debug("Detected Discover format")
         return process_discover_format(df)
-    elif all(col in df.columns for col in ['Date', 'Description', 'Card Member', 'Account #', 'Amount']):
-        logger.debug("Detected Amex format")
-        return process_amex_format(df)
-    elif all(col in df.columns for col in ['Transaction Date', 'Posted Date', 'Card No.', 'Description', 'Category', 'Debit', 'Credit']):
+    elif 'Transaction Date' in df.columns and 'Card No.' in df.columns:
         logger.debug("Detected Capital One format")
         return process_capital_one_format(df)
-    elif all(col in df.columns for col in ['Details', 'Posting Date', 'Description', 'Amount', 'Type', 'Balance', 'Check or Slip #']):
+    elif 'Posting Date' in df.columns:
         logger.debug("Detected Chase format")
         return process_chase_format(df)
-    elif all(col in df.columns for col in ['Date', 'Description', 'Amount', 'Category', 'Post Date']):
+    elif 'Date' in df.columns and 'Post Date' in df.columns:
         logger.debug("Detected Alliant Visa format")
         return process_alliant_visa_format(df)
-    elif all(col in df.columns for col in ['Date', 'Description', 'Amount', 'Category']):
+    elif 'Date' in df.columns and 'Balance' in df.columns:
         logger.debug("Detected Alliant Checking format")
         return process_alliant_checking_format(df)
-    elif all(col in df.columns for col in ['Date', 'Account', 'Description', 'Category', 'Tags', 'Amount']):
+    elif 'Date' in df.columns and 'Category' in df.columns:
         logger.debug("Detected Aggregator format")
         return process_aggregator_format(df)
     else:
-        raise ValueError("Could not detect file format based on columns")
+        raise ValueError(f"Unknown format in {file_path}. Columns: {df.columns.tolist()}")
 
 def import_folder(folder_path):
     """
@@ -925,28 +934,51 @@ def format_report_summary(matches_df, unmatched_df):
     return "".join(summary)
 
 def main():
-    """
-    Main function to run the reconciliation process.
-    """
+    """Main function to run the reconciliation process."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Reconcile transaction data')
+    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
+    parser.add_argument('--log-level', choices=['debug', 'info', 'warning', 'error'], 
+                       default='info', help='Set logging level')
+    args = parser.parse_args()
+    
     # Set up logging
-    setup_logging()
+    log_level = getattr(logging, args.log_level.upper())
+    setup_logging(log_level)
     
-    # Import data
-    aggregator_df = import_csv("data/2025/empower_2025.csv")
-    detail_records = []
-    for file in os.listdir("data/2025/details"):
-        if file.endswith('.csv'):
-            detail_records.append(import_csv(os.path.join("data/2025/details", file)))
+    logger.info("Starting reconciliation process")
     
-    # Reconcile transactions
-    matches, unmatched = reconcile_transactions(aggregator_df, detail_records)
+    # Create output directories
+    create_output_directories("output")
     
-    # Export results
-    export_reconciliation(matches, "output/matched.csv")
-    export_reconciliation(unmatched, "output/unmatched.csv")
-    
-    # Generate report
-    generate_reconciliation_report(matches, unmatched, "output/report.txt")
+    # Import and process data
+    try:
+        # Import aggregator data
+        logger.info("Importing aggregator data")
+        aggregator_df = import_csv("data/2025/empower_2025.csv")
+        
+        # Import and process detail data
+        logger.info("Importing and processing detail data")
+        detail_dfs = []
+        for file in os.listdir("data/2025/details"):
+            if file.endswith(".csv"):
+                logger.info(f"Processing {file}")
+                df = import_csv(os.path.join("data/2025/details", file))
+                detail_dfs.append(df)
+        
+        # Reconcile transactions
+        logger.info("Reconciling transactions")
+        reconciled_df, unmatched_df = reconcile_transactions(aggregator_df, detail_dfs)
+        
+        # Save results
+        logger.info("Saving results")
+        save_reconciliation_results(reconciled_df, unmatched_df, "output")
+        
+        logger.info("Reconciliation complete")
+        
+    except Exception as e:
+        logger.error(f"Error during reconciliation: {str(e)}")
+        raise
 
 if __name__ == "__main__":
     main()

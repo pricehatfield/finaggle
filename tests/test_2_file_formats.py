@@ -87,19 +87,18 @@ def create_test_format_data(format_name):
         return pd.DataFrame({
             'Date': ['03/17/2025'],
             'Description': ['AMAZON.COM'],
-            'Amount': ['123.45'],
-            'Category': ['Shopping'],
-            'source_file': ['amex_test.csv']
+            'Card Member': ['PRICE L HATFIELD'],
+            'Account #': ['-42004'],
+            'Amount': ['123.45']
         })
     elif format_name == 'aggregator':
         return pd.DataFrame({
-            'Date': ['03/17/2025'],
+            'Date': ['2025-03-17'],
+            'Account': ['Technology Transfer, Inc 401(k) Profit Sharing Plan - Ending in 1701'],
             'Description': ['AMAZON.COM'],
             'Amount': ['-123.45'],
             'Category': ['Shopping'],
-            'Tags': ['Online'],
-            'Account': ['Discover'],
-            'source_file': ['aggregator_test.csv']
+            'Tags': ['Online']
         })
     else:
         raise ValueError(f"Unsupported format: {format_name}")
