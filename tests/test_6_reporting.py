@@ -246,4 +246,125 @@ def test_empty_results_handling(tmp_path):
         content = f.read()
         assert "Total Transactions: 0" in content
         assert "No matched transactions found" in content
-        assert "No unmatched transactions found" in content 
+        assert "No unmatched transactions found" in content
+
+def test_output_format_validation(sample_matched_df, sample_unmatched_df):
+    """Test that output format follows specifications."""
+    # Test matched columns
+    required_matched_columns = [
+        'Transaction Date',
+        'Post Date',
+        'Description',
+        'Amount',
+        'Category',
+        'source_file',
+        'match_type'
+    ]
+    assert all(col in sample_matched_df.columns for col in required_matched_columns), \
+        f"Missing required columns in matched output. Expected: {required_matched_columns}, Got: {sample_matched_df.columns.tolist()}"
+
+    # Test unmatched columns
+    required_unmatched_columns = [
+        'Transaction Date',
+        'Post Date',
+        'Description',
+        'Amount',
+        'Category',
+        'source_file'
+    ]
+    assert all(col in sample_unmatched_df.columns for col in required_unmatched_columns), \
+        f"Missing required columns in unmatched output. Expected: {required_unmatched_columns}, Got: {sample_unmatched_df.columns.tolist()}"
+
+    # Test date formats
+    for df in [sample_matched_df, sample_unmatched_df]:
+        for date_col in ['Transaction Date', 'Post Date']:
+            pd.to_datetime(df[date_col], format='%Y-%m-%d')
+
+    # Test amount format
+    for df in [sample_matched_df, sample_unmatched_df]:
+        assert pd.api.types.is_numeric_dtype(df['Amount']), \
+            "Amount column should be numeric"
+
+    # Test match type values
+    valid_match_types = {'post_date_amount', 'transaction_date_amount'}
+    assert all(match_type in valid_match_types for match_type in sample_matched_df['match_type'].unique()), \
+        f"Invalid match_type values found. Expected: {valid_match_types}"
+
+    # Test source file format
+    for df in [sample_matched_df, sample_unmatched_df]:
+        assert all(isinstance(source, str) for source in df['source_file']), \
+            "source_file should be strings"
+        assert all(source.endswith('.csv') for source in df['source_file']), \
+            "source_file should end with .csv"
+
+    # Test category format
+    for df in [sample_matched_df, sample_unmatched_df]:
+        assert all(isinstance(cat, str) for cat in df['Category']), \
+            "Category should be strings"
+
+    # Test description format
+    for df in [sample_matched_df, sample_unmatched_df]:
+        assert all(isinstance(desc, str) for desc in df['Description']), \
+            "Description should be strings"
+
+def test_report_generation_with_matched_and_unmatched(sample_matched_df, sample_unmatched_df, tmp_path):
+    """Test report generation with both matched and unmatched transactions."""
+    # Generate report
+    report_path = tmp_path / "report.txt"
+    generate_reconciliation_report(sample_matched_df, sample_unmatched_df, report_path)
+    
+    # Verify report exists and has content
+    assert os.path.exists(report_path)
+    with open(report_path, 'r') as f:
+        content = f.read()
+        assert "Matched Transactions" in content
+        assert "Unmatched Transactions" in content
+        assert "Total Transactions: 8" in content
+        assert "Matched Transactions: 5" in content
+        assert "Unmatched Transactions: 3" in content
+        assert "Total Amount: $1,690.00" in content
+        assert "Matched Amount: $1,745.00" in content
+        assert "Unmatched Amount: $-130.00" in content
+
+def test_report_generation_empty_data(tmp_path):
+    """Test report generation with empty DataFrames."""
+    # Create empty DataFrames
+    empty_matched = pd.DataFrame(columns=[
+        'Transaction Date', 'Post Date', 'Description', 'Amount', 
+        'Category', 'source_file', 'match_type'
+    ])
+    empty_unmatched = pd.DataFrame(columns=[
+        'Transaction Date', 'Post Date', 'Description', 'Amount', 
+        'Category', 'source_file'
+    ])
+    
+    # Generate report
+    report_path = tmp_path / "report.txt"
+    generate_reconciliation_report(empty_matched, empty_unmatched, report_path)
+    
+    # Verify report exists and has appropriate message
+    assert os.path.exists(report_path)
+    with open(report_path, 'r') as f:
+        content = f.read()
+        assert "Total Transactions: 0" in content
+        assert "No matched transactions found" in content
+        assert "No unmatched transactions found" in content
+
+def test_save_reconciliation_results(sample_matched_df, sample_unmatched_df, tmp_path):
+    """Test saving reconciliation results to CSV files."""
+    # Save results
+    output_dir = tmp_path / "output"
+    save_reconciliation_results(sample_matched_df, sample_unmatched_df, output_dir)
+    
+    # Verify files exist
+    assert os.path.exists(output_dir / "matched.csv")
+    assert os.path.exists(output_dir / "unmatched.csv")
+    
+    # Verify content
+    matched_df = pd.read_csv(output_dir / "matched.csv")
+    unmatched_df = pd.read_csv(output_dir / "unmatched.csv")
+    
+    assert len(matched_df) == len(sample_matched_df)
+    assert len(unmatched_df) == len(sample_unmatched_df)
+    assert set(matched_df.columns) == set(sample_matched_df.columns)
+    assert set(unmatched_df.columns) == set(sample_unmatched_df.columns) 

@@ -345,3 +345,62 @@ def test_data_conversion_consistency():
         # Check that amounts are consistent in sign
         if format_name in ['discover', 'chase', 'alliant_checking', 'alliant_visa']:
             assert (result['Amount'] < 0).all(), f"Amount sign inconsistency in {format_name} format"
+
+def test_output_format_specification(sample_matched_df, sample_unmatched_df):
+    """Test that output format follows specifications."""
+    # Test matched columns
+    required_matched_columns = [
+        'Transaction Date',
+        'Post Date',
+        'Description',
+        'Amount',
+        'Category',
+        'source_file',
+        'match_type'
+    ]
+    assert all(col in sample_matched_df.columns for col in required_matched_columns), \
+        f"Missing required columns in matched output. Expected: {required_matched_columns}, Got: {sample_matched_df.columns.tolist()}"
+
+    # Test unmatched columns
+    required_unmatched_columns = [
+        'Transaction Date',
+        'Post Date',
+        'Description',
+        'Amount',
+        'Category',
+        'source_file'
+    ]
+    assert all(col in sample_unmatched_df.columns for col in required_unmatched_columns), \
+        f"Missing required columns in unmatched output. Expected: {required_unmatched_columns}, Got: {sample_unmatched_df.columns.tolist()}"
+
+    # Test date formats
+    for df in [sample_matched_df, sample_unmatched_df]:
+        for date_col in ['Transaction Date', 'Post Date']:
+            pd.to_datetime(df[date_col], format='%Y-%m-%d')
+
+    # Test amount format
+    for df in [sample_matched_df, sample_unmatched_df]:
+        assert pd.api.types.is_numeric_dtype(df['Amount']), \
+            "Amount column should be numeric"
+
+    # Test match type values
+    valid_match_types = {'post_date_amount', 'transaction_date_amount'}
+    assert all(match_type in valid_match_types for match_type in sample_matched_df['match_type'].unique()), \
+        f"Invalid match_type values found. Expected: {valid_match_types}"
+
+    # Test source file format
+    for df in [sample_matched_df, sample_unmatched_df]:
+        assert all(isinstance(source, str) for source in df['source_file']), \
+            "source_file should be strings"
+        assert all(source.endswith('.csv') for source in df['source_file']), \
+            "source_file should end with .csv"
+
+    # Test category format
+    for df in [sample_matched_df, sample_unmatched_df]:
+        assert all(isinstance(cat, str) for cat in df['Category']), \
+            "Category should be strings"
+
+    # Test description format
+    for df in [sample_matched_df, sample_unmatched_df]:
+        assert all(isinstance(desc, str) for desc in df['Description']), \
+            "Description should be strings"

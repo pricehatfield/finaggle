@@ -93,4 +93,31 @@ def sample_standardized_df():
         'Amount': [-50.00, 25.00],
         'Category': ['Shopping', 'Income'],
         'source_file': ['capital_one', 'chase']
+    })
+
+@pytest.fixture
+def sample_matched_df():
+    """Sample matched transactions after reconciliation."""
+    return pd.DataFrame({
+        'Transaction Date': ['2025-01-01', '2025-01-03', '2025-01-05', '2025-01-07', '2025-01-09'],
+        'Post Date': ['2025-01-02', '2025-01-04', '2025-01-06', '2025-01-08', '2025-01-10'],
+        'Description': ['Grocery Store', 'Gas Station', 'Restaurant', 'Salary', 'Online Shopping'],
+        'Amount': [-50.00, -30.00, -75.00, 2000.00, -100.00],
+        'Category': ['Groceries', 'Transportation', 'Dining', 'Income', 'Shopping'],
+        'source_file': ['alliant_checking_2025.csv', 'alliant_visa_2025.csv', 'amex_2025.csv', 
+                       'alliant_checking_2025.csv', 'alliant_visa_2025.csv'],
+        'match_type': ['post_date_amount', 'transaction_date_amount', 'post_date_amount', 
+                      'post_date_amount', 'transaction_date_amount']
+    })
+
+@pytest.fixture
+def sample_unmatched_df():
+    """Sample unmatched transactions after reconciliation."""
+    return pd.DataFrame({
+        'Transaction Date': ['2025-01-11', '2025-01-13', '2025-01-15'],
+        'Post Date': ['2025-01-12', '2025-01-14', '2025-01-16'],
+        'Description': ['Unknown Transaction', 'Pending Charge', 'Disputed Transaction'],
+        'Amount': [-25.00, -45.00, -60.00],
+        'Category': ['Uncategorized', 'Uncategorized', 'Uncategorized'],
+        'source_file': ['alliant_checking_2025.csv', 'alliant_visa_2025.csv', 'amex_2025.csv']
     }) 
