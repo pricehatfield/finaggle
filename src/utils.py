@@ -11,6 +11,38 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+def setup_logging():
+    """
+    Set up logging configuration.
+    
+    Uses LOG_FILE environment variable to determine log file location.
+    If LOG_FILE is not set, logs to stderr.
+    """
+    # Set root logger level to INFO
+    logging.getLogger().setLevel(logging.INFO)
+    
+    log_file = os.getenv('LOG_FILE')
+    if log_file:
+        # Ensure log directory exists
+        log_dir = os.path.dirname(log_file)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+            
+        logging.basicConfig(
+            filename=log_file,
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        
+        # Create an empty log file if it doesn't exist
+        if not os.path.exists(log_file):
+            open(log_file, 'a').close()
+    else:
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+
 def ensure_directory(dir_type):
     """
     Verify a directory exists and create it if necessary.

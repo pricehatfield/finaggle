@@ -35,38 +35,9 @@ import logging
 import pathlib
 import re
 import csv
-from src.utils import ensure_directory, create_output_directories
+from src.utils import ensure_directory, create_output_directories, setup_logging
 
 logger = logging.getLogger(__name__)
-
-def setup_logging():
-    """
-    Set up logging configuration.
-    
-    Uses LOG_FILE environment variable to determine log file location.
-    If LOG_FILE is not set, logs to stderr.
-    """
-    log_file = os.getenv('LOG_FILE')
-    if log_file:
-        # Ensure log directory exists
-        log_dir = os.path.dirname(log_file)
-        if log_dir:
-            os.makedirs(log_dir, exist_ok=True)
-            
-        logging.basicConfig(
-            filename=log_file,
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-        
-        # Create an empty log file if it doesn't exist
-        if not os.path.exists(log_file):
-            open(log_file, 'a').close()
-    else:
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
 
 def standardize_date(date_str):
     """
@@ -826,60 +797,117 @@ def export_reconciliation(results_df, output_path):
         logger.error(f"Error exporting results to {output_path}: {e}")
         raise
 
-def generate_reconciliation_report(reconciliation_results):
+def generate_reconciliation_report(matches_df, unmatched_df, report_path):
     """
-    Generate a human-readable reconciliation report.
+    Generate a reconciliation report and save it to a text file.
     
     Args:
-        reconciliation_results (dict): Dictionary containing reconciliation results
-    
-    Returns:
-        str: Formatted report text
+        matches_df (pd.DataFrame): DataFrame containing matched transactions
+        unmatched_df (pd.DataFrame): DataFrame containing unmatched transactions
+        report_path (str or Path): Path where the report should be saved
     """
-    logger.info("Generating reconciliation report")
+    # Create report content
+    report_content = []
     
-    report = []
-    report.append("Reconciliation Report")
-    report.append("=" * 50)
-    report.append("")
+    # Add summary section
+    report_content.append("=== Reconciliation Report ===\n")
+    report_content.append(format_report_summary(matches_df, unmatched_df))
     
-    # Matched Transactions
-    report.append("Matched Transactions")
-    report.append("-" * 50)
-    if len(reconciliation_results['matched']) > 0:
-        for _, row in reconciliation_results['matched'].iterrows():
-            report.append(f"Date: {row['Transaction Date']}")
-            report.append(f"Description: {row['Description']}")
-            report.append(f"Amount: {row['Amount']}")
-            report.append(f"Source: {row['source_file']}")
-            report.append("")
+    # Add matched transactions section
+    report_content.append("\n=== Matched Transactions ===\n")
+    if not matches_df.empty:
+        for _, row in matches_df.iterrows():
+            report_content.append(
+                f"Date: {row['Transaction Date']} | "
+                f"Description: {row['Description']} | "
+                f"Amount: ${abs(row['Amount']):.2f} | "
+                f"Category: {row['Category']}\n"
+            )
     else:
-        report.append("No matched transactions")
-        report.append("")
+        report_content.append("No matched transactions found.\n")
     
-    # Unmatched Transactions
-    report.append("Unmatched Transactions")
-    report.append("-" * 50)
-    if len(reconciliation_results['unmatched']) > 0:
-        for _, row in reconciliation_results['unmatched'].iterrows():
-            report.append(f"Date: {row['Transaction Date']}")
-            report.append(f"Description: {row['Description']}")
-            report.append(f"Amount: {row['Amount']}")
-            report.append(f"Source: {row['source_file']}")
-            report.append("")
+    # Add unmatched transactions section
+    report_content.append("\n=== Unmatched Transactions ===\n")
+    if not unmatched_df.empty:
+        for _, row in unmatched_df.iterrows():
+            report_content.append(
+                f"Date: {row['Transaction Date']} | "
+                f"Description: {row['Description']} | "
+                f"Amount: ${abs(row['Amount']):.2f} | "
+                f"Category: {row['Category']} | "
+                f"Source: {row['source_file']}\n"
+            )
     else:
-        report.append("No unmatched transactions")
-        report.append("")
+        report_content.append("No unmatched transactions found.\n")
     
-    # Summary
-    report.append("Summary")
-    report.append("-" * 50)
-    report.append(f"Total Matched Transactions: {len(reconciliation_results['matched'])}")
-    report.append(f"Total Unmatched Transactions: {len(reconciliation_results['unmatched'])}")
-    report.append(f"Total Amount Matched: {reconciliation_results['matched']['Amount'].sum():.2f}")
-    report.append(f"Total Amount Unmatched: {reconciliation_results['unmatched']['Amount'].sum():.2f}")
+    # Write report to file
+    with open(report_path, 'w') as f:
+        f.writelines(report_content)
+
+def save_reconciliation_results(matches_df, unmatched_df, output_dir):
+    """
+    Save reconciliation results to CSV files.
     
-    return "\n".join(report)
+    Args:
+        matches_df (pd.DataFrame): DataFrame containing matched transactions
+        unmatched_df (pd.DataFrame): DataFrame containing unmatched transactions
+        output_dir (str or Path): Directory where the files should be saved
+    """
+    # Ensure output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Save matched transactions
+    matches_path = os.path.join(output_dir, "matched.csv")
+    matches_df.to_csv(matches_path, index=False)
+    
+    # Save unmatched transactions
+    unmatched_path = os.path.join(output_dir, "unmatched.csv")
+    unmatched_df.to_csv(unmatched_path, index=False)
+
+def format_report_summary(matches_df, unmatched_df):
+    """
+    Format a summary of the reconciliation results.
+    
+    Args:
+        matches_df (pd.DataFrame): DataFrame containing matched transactions
+        unmatched_df (pd.DataFrame): DataFrame containing unmatched transactions
+        
+    Returns:
+        str: Formatted summary text
+        
+    Raises:
+        ValueError: If required columns are missing
+    """
+    # Validate required columns
+    required_columns = ['Transaction Date', 'Post Date', 'Description', 'Amount']
+    for df in [matches_df, unmatched_df]:
+        if not df.empty and not all(col in df.columns for col in required_columns):
+            raise ValueError("Missing required columns in DataFrame")
+    
+    summary = []
+    
+    # Count statistics
+    total_matches = len(matches_df)
+    total_unmatched = len(unmatched_df)
+    total_transactions = total_matches + total_unmatched
+    
+    # Calculate match rate
+    match_rate = (total_matches / total_transactions * 100) if total_transactions > 0 else 0
+    
+    # Calculate total amounts
+    matched_amount = matches_df['Amount'].sum() if not matches_df.empty else 0
+    unmatched_amount = unmatched_df['Amount'].sum() if not unmatched_df.empty else 0
+    total_amount = matched_amount + unmatched_amount
+    
+    # Format summary
+    summary.append(f"Total Transactions: {total_transactions}\n")
+    summary.append(f"Matched Transactions: {total_matches} ({match_rate:.1f}%)\n")
+    summary.append(f"Unmatched Transactions: {total_unmatched}\n")
+    summary.append(f"\nTotal Amount: ${abs(total_amount):.2f}\n")
+    summary.append(f"Matched Amount: ${abs(matched_amount):.2f}\n")
+    summary.append(f"Unmatched Amount: ${abs(unmatched_amount):.2f}\n")
+    
+    return "".join(summary)
 
 def main():
     """
@@ -903,13 +931,7 @@ def main():
     export_reconciliation(unmatched, "output/unmatched.csv")
     
     # Generate report
-    report = generate_reconciliation_report({
-        'matched': matches,
-        'unmatched': unmatched
-    })
-    
-    with open("output/report.txt", "w") as f:
-        f.write(report)
+    generate_reconciliation_report(matches, unmatched, "output/report.txt")
 
 if __name__ == "__main__":
     main()

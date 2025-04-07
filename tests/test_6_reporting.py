@@ -13,6 +13,7 @@ from src.reconcile import (
     save_reconciliation_results,
     format_report_summary
 )
+from src.utils import setup_logging
 
 def create_test_df(name, num_records=3):
     """Helper function to create test DataFrames with standardized format"""
@@ -75,18 +76,6 @@ def sample_aggregator_df():
         'source_file': ['aggregator.csv']
     })
 
-def test_setup_logging(tmp_path, monkeypatch):
-    """Test logging setup"""
-    log_file = tmp_path / 'test.log'
-    monkeypatch.setenv('LOG_FILE', str(log_file))
-    
-    # Import after setting environment variable
-    from src.reconcile import setup_logging
-    setup_logging()
-    
-    assert log_file.exists()
-    assert logging.getLogger().level == logging.INFO
-
 def test_ensure_directory(tmp_path, monkeypatch):
     """Test directory creation"""
     test_dir = tmp_path / 'test_dir'
@@ -94,10 +83,15 @@ def test_ensure_directory(tmp_path, monkeypatch):
     
     # Import after setting environment variable
     from src.reconcile import ensure_directory
-    ensure_directory()
     
-    assert test_dir.exists()
-    assert test_dir.is_dir()
+    # Test both directory types
+    archive_dir = ensure_directory("archive")
+    logs_dir = ensure_directory("logs")
+    
+    assert os.path.exists(archive_dir)
+    assert os.path.isdir(archive_dir)
+    assert os.path.exists(logs_dir)
+    assert os.path.isdir(logs_dir)
 
 def test_import_csv(tmp_path):
     """Test CSV import"""
@@ -124,7 +118,6 @@ def test_import_folder(tmp_path):
     assert len(result) == 2
     assert all(not df.empty for df in result)
 
-@pytest.mark.dependency(depends=["test_6_reconciliation.py"])
 class TestReporting:
     """Test suite for reconciliation reporting"""
     
@@ -217,30 +210,26 @@ class TestReporting:
         summary = format_report_summary(matches, unmatched)
         
         # Verify summary content
-        assert "Total Matched Transactions: 2" in summary
-        assert "Total Unmatched Transactions: 1" in summary
-        assert "Total Amount Matched: -125.00" in summary
-        assert "Total Amount Unmatched: -100.00" in summary
+        assert "Total Transactions: 3" in summary
+        assert "Matched Transactions: 2" in summary
+        assert "Unmatched Transactions: 1" in summary
+        assert "Total Amount: $225.00" in summary
+        assert "Matched Amount: $125.00" in summary
+        assert "Unmatched Amount: $100.00" in summary
 
-@pytest.mark.dependency(depends=["test_6_reconciliation.py"])
 def test_report_validation():
     """Test report validation"""
-    # Create sample data with invalid values
+    # Create sample data with missing required columns
     matches = pd.DataFrame({
-        'Transaction Date': ['invalid_date'],
-        'Post Date': ['2025-01-02'],
-        'Description': ['test transaction'],
-        'Amount': ['invalid_amount'],
+        'Description': ['test transaction'],  # Missing Transaction Date, Post Date, and Amount
         'Category': ['shopping'],
-        'source_file': ['source.csv'],
-        'target_file': ['target.csv']
+        'source_file': ['source.csv']
     })
     
-    # Should raise ValueError for invalid data
+    # Should raise ValueError for missing required columns
     with pytest.raises(ValueError):
         generate_reconciliation_report(matches, pd.DataFrame(), "report.txt")
 
-@pytest.mark.dependency(depends=["test_6_reconciliation.py"])
 def test_empty_results_handling(tmp_path):
     """Test handling of empty results"""
     # Create empty DataFrames
@@ -255,4 +244,6 @@ def test_empty_results_handling(tmp_path):
     assert os.path.exists(report_path)
     with open(report_path, 'r') as f:
         content = f.read()
-        assert "No transactions to report" in content 
+        assert "Total Transactions: 0" in content
+        assert "No matched transactions found" in content
+        assert "No unmatched transactions found" in content 

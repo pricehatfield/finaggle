@@ -4,6 +4,7 @@ import numpy as np
 import os
 from src.reconcile import standardize_date, clean_amount
 from src.utils import ensure_directory, create_output_directories
+import logging
 
 def create_test_date_data():
     """Create standardized test data for date standardization.
@@ -237,4 +238,16 @@ class TestDirectoryOperations:
         create_output_directories(str_output_dir)
         assert os.path.exists(str_output_dir)
         assert os.path.exists(os.path.join(str_output_dir, "reconciled"))
-        assert os.path.exists(os.path.join(str_output_dir, "unmatched")) 
+        assert os.path.exists(os.path.join(str_output_dir, "unmatched"))
+
+def test_setup_logging(tmp_path, monkeypatch):
+    """Test logging setup"""
+    log_file = tmp_path / 'test.log'
+    monkeypatch.setenv('LOG_FILE', str(log_file))
+    
+    # Import after setting environment variable
+    from src.utils import setup_logging
+    setup_logging()
+    
+    assert log_file.exists()
+    assert logging.getLogger().level == logging.INFO 
