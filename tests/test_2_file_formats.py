@@ -453,3 +453,62 @@ def test_reconciled_format_validation(sample_transactions_df):
     # Test Account format
     assert all(acc.startswith(('Matched - ', 'Unreconciled - ')) for acc in sample_transactions_df['Account']), \
         "Account must start with 'Matched - ' or 'Unreconciled - '"
+
+def test_empower_account_extraction():
+    """Test extraction of account numbers from Empower descriptions."""
+    # Sample data with account numbers
+    data = {
+        'Transaction Date': ['2025-03-13', '2025-03-12', '2025-03-12', '2025-03-12'],
+        'Description': [
+            'Hilton Honors Surpass Card - Ending in 2004',
+            'Discover More Card - Ending in 0877',
+            'Cashback Visa Signature - Ending in 1967',
+            'Checking - Ending in 1258'
+        ],
+        'Amount': [-126.12, -45.43, -92.94, -95.89]
+    }
+    df = pd.DataFrame(data)
+    
+    # Process the data
+    result = process_aggregator_format(df)
+    
+    # Verify account numbers are extracted
+    assert 'Account' in result.columns
+    assert result['Account'].iloc[0] == '2004'
+    assert result['Account'].iloc[1] == '0877'
+    assert result['Account'].iloc[2] == '1967'
+    assert result['Account'].iloc[3] == '1258'
+    
+    # Verify descriptions are cleaned
+    assert result['Description'].iloc[0] == 'Hilton Honors Surpass Card'
+    assert result['Description'].iloc[1] == 'Discover More Card'
+    assert result['Description'].iloc[2] == 'Cashback Visa Signature'
+    assert result['Description'].iloc[3] == 'Checking'
+
+def test_empower_tag_handling():
+    """Test handling of tags in Empower data."""
+    # Sample data with tags
+    data = {
+        'Transaction Date': ['2025-03-13', '2025-03-12', '2025-03-12', '2025-03-12'],
+        'Description': [
+            'AT&T UVERSE PAYMENT',
+            'Amazon Marketplace',
+            'Direct Energy',
+            'Private Internet Access'
+        ],
+        'Category': ['Telephone', 'Electronics', 'Utilities', 'Cable/Satellite'],
+        'Tags': ['Joint', 'Joint', 'Joint', 'Joint'],
+        'Amount': [-126.12, -45.43, -92.94, -95.89]
+    }
+    df = pd.DataFrame(data)
+    
+    # Process the data
+    result = process_aggregator_format(df)
+    
+    # Verify tags are preserved
+    assert 'Tags' in result.columns
+    assert all(result['Tags'] == 'Joint')
+    
+    # Verify tags are properly formatted
+    assert isinstance(result['Tags'].iloc[0], str)
+    assert result['Tags'].iloc[0] == 'Joint'

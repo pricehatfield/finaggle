@@ -58,11 +58,13 @@ alliant_visa_sample_data = {
 
 empower_sample_data = {
     'Date': ['2025-03-17', '2025-03-13'],
-    'Account': ['Technology Transfer, Inc 401(k) Profit Sharing Plan - Ending in 1701', 'Hilton Honors Surpass Card - Ending in 2004'],
-    'Description': ['Putnam Retirement Advantage Trst 2040 X', 'At&t Uverse Payment Xxxxxx2020 Tx'],
-    'Category': ['Retirement Contributions', 'Telephone'],
-    'Tags': ['', 'Joint'],
-    'Amount': ['0', '-126.12']  # Negative for debits, positive for credits
+    'Description': [
+        'Discover Card - Ending in 0877',
+        'AMAZON.COM'
+    ],
+    'Category': ['Shopping', 'Shopping'],
+    'Tags': ['Online', 'Online'],
+    'Amount': ['-123.45', '-45.67']  # Negative for debits
 }
 
 @pytest.fixture

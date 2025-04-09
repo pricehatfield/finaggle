@@ -431,3 +431,35 @@ def test_full_standardization_pipeline():
     assert df['Description'].iloc[0] == "Test Transaction"
     assert df['Category'].iloc[0] == "SHOPPING"
     assert df['Amount'].iloc[0] == -50.0 
+
+def test_category_standardization():
+    """Test standardization of categories across different sources."""
+    # Sample data with different category names for the same type
+    data = {
+        'Transaction Date': ['2025-01-01', '2025-01-02', '2025-01-03', '2025-01-04'],
+        'Description': [
+            'HEB ONLINE #108',
+            'AMAZON MKTPL*ZE7G64KH1',
+            'NETFLIX.COM',
+            'AT&T UVERSE PAYMENT'
+        ],
+        'Category': [
+            'Supermarkets',  # Discover
+            'Merchandise',   # Discover
+            'Services',      # Discover
+            'Telephone'      # Amex
+        ],
+        'Amount': [-40.33, -42.66, -24.89, -126.12],
+        'source_file': ['discover_2025.csv', 'discover_2025.csv', 'discover_2025.csv', 'amex_2025.csv']
+    }
+    df = pd.DataFrame(data)
+    
+    # Process the data
+    result = df.copy()
+    result['Category'] = result['Category'].apply(standardize_category)
+    
+    # Verify categories are standardized
+    assert result['Category'].iloc[0] == 'Groceries'
+    assert result['Category'].iloc[1] == 'Shopping'
+    assert result['Category'].iloc[2] == 'Entertainment'
+    assert result['Category'].iloc[3] == 'Utilities' 

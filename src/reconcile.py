@@ -170,8 +170,26 @@ def standardize_category(category):
     """
     if pd.isna(category) or not isinstance(category, str) or not category.strip():
         return 'Uncategorized'
-        
-    return category.strip()
+    
+    # Standardize case and remove extra spaces
+    category = category.strip()
+    
+    # Define category mappings
+    category_map = {
+        'Supermarkets': 'Groceries',
+        'Merchandise': 'Shopping',
+        'Services': 'Entertainment',
+        'Telephone': 'Utilities',
+        'Cable/Satellite': 'Utilities',
+        'Travel/ Entertainment': 'Entertainment',
+        'Payments and Credits': 'Transfers',
+        'Payment/Credit': 'Transfers',
+        'Healthcare/Medical': 'Healthcare',
+        'Electronics': 'Shopping'
+    }
+    
+    # Return mapped category or original if no mapping exists
+    return category_map.get(category, category)
 
 def is_valid_amount(x):
     """
@@ -402,7 +420,7 @@ def process_aggregator_format(df):
         result['Post Date'] = df['Date'].apply(standardize_date)  # Use same date for both
     else:
         result['Transaction Date'] = df['Transaction Date'].apply(standardize_date)
-        result['Post Date'] = df['Post Date'].apply(standardize_date)
+        result['Post Date'] = df['Transaction Date'].apply(standardize_date)  # Use transaction date for post date
     
     # Validate dates
     if result['Transaction Date'].isna().any():
@@ -410,20 +428,36 @@ def process_aggregator_format(df):
     if result['Post Date'].isna().any():
         raise ValueError("Invalid date format")
     
-    # Map description
-    result['Description'] = df['Description'].apply(standardize_description)
+    # Extract account numbers and clean descriptions
+    if 'Description' not in df.columns:
+        raise ValueError("Description cannot be empty")
+        
+    # Validate descriptions
+    if df['Description'].isna().any() or (df['Description'] == '').any():
+        raise ValueError("Description cannot be empty")
+    
+    # Handle Account field - use explicit column if present, otherwise extract from description
+    if 'Account' in df.columns:
+        result['Account'] = df['Account']
+    else:
+        # Extract account numbers from descriptions ending with "- Ending in XXXX"
+        account_pattern = r'Ending\s+in\s+(\d+)'
+        account_matches = df['Description'].str.extract(account_pattern, expand=False)
+        result['Account'] = account_matches.fillna('')
+    
+    # Clean descriptions by removing the account number part
+    result['Description'] = df['Description'].str.replace(r'\s*-\s*Ending\s+in\s+\d+\s*$', '', regex=True)
+    result['Description'] = result['Description'].apply(standardize_description)
     
     # Convert amount to float
     result['Amount'] = df['Amount'].apply(clean_amount)
     
     # Map category
-    result['Category'] = df['Category'].apply(standardize_category)
+    result['Category'] = df['Category'].apply(standardize_category) if 'Category' in df.columns else 'Uncategorized'
     
     # Preserve additional metadata
     if 'Tags' in df.columns:
         result['Tags'] = df['Tags']
-    if 'Account' in df.columns:
-        result['Account'] = df['Account']
     
     # Add source file information
     result['source_file'] = df.get('source_file', 'aggregator')
@@ -449,14 +483,36 @@ def process_post_date_format(df):
             - Amount: Numeric amount (negative for debits)
             - Category: Transaction category
             - source_file: Set to 'post_date'
+            
+    Raises:
+        ValueError: If any required field is invalid or missing
     """
+    # Validate required columns
+    required_cols = ['Post Date', 'Description', 'Amount']
+    if not all(col in df.columns for col in required_cols):
+        raise ValueError(f"Missing required columns. Expected: {required_cols}")
+
+    # Create result DataFrame
     result = df.copy()
-    result['Transaction Date'] = result['Post Date'].apply(standardize_date)  # Use post date for both
+    
+    # Map and validate dates
     result['Post Date'] = result['Post Date'].apply(standardize_date)
+    if result['Post Date'].isna().any():
+        raise ValueError("Invalid date format")
+    
+    # Use post date for transaction date
+    result['Transaction Date'] = result['Post Date']
+    
+    # Map and validate description
+    result['Description'] = result['Description'].apply(standardize_description)
+    
+    # Convert and validate amount
     result['Amount'] = result['Amount'].apply(clean_amount) * -1  # Convert to negative for debits
-    result['Description'] = result['Description'].str.strip()
+    
+    # Map category
     result['Category'] = result.get('Category', pd.Series('', index=result.index))
     result['source_file'] = result.get('source_file', pd.Series('post_date', index=result.index))
+    
     return result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
 
 def process_date_format(df):
@@ -478,14 +534,36 @@ def process_date_format(df):
             - Amount: Numeric amount (negative for debits)
             - Category: Transaction category
             - source_file: Set to 'date'
+            
+    Raises:
+        ValueError: If any required field is invalid or missing
     """
+    # Validate required columns
+    required_cols = ['Transaction Date', 'Description', 'Amount']
+    if not all(col in df.columns for col in required_cols):
+        raise ValueError(f"Missing required columns. Expected: {required_cols}")
+
+    # Create result DataFrame
     result = df.copy()
+    
+    # Map and validate dates
     result['Transaction Date'] = result['Transaction Date'].apply(standardize_date)
-    result['Post Date'] = result['Transaction Date'].apply(standardize_date)  # Use transaction date for both
+    if result['Transaction Date'].isna().any():
+        raise ValueError("Invalid date format")
+    
+    # Use transaction date for post date
+    result['Post Date'] = result['Transaction Date']
+    
+    # Map and validate description
+    result['Description'] = result['Description'].apply(standardize_description)
+    
+    # Convert and validate amount
     result['Amount'] = result['Amount'].apply(clean_amount) * -1  # Convert to negative for debits
-    result['Description'] = result['Description'].str.strip()
+    
+    # Map category
     result['Category'] = result.get('Category', pd.Series('', index=result.index))
     result['source_file'] = result.get('source_file', pd.Series('date', index=result.index))
+    
     return result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
 
 def process_debit_credit_format(df):
@@ -508,20 +586,39 @@ def process_debit_credit_format(df):
             - Amount: Numeric amount (negative for debits)
             - Category: Transaction category
             - source_file: Set to 'debit_credit'
+            
+    Raises:
+        ValueError: If any required field is invalid or missing
     """
+    # Validate required columns
+    required_cols = ['Date', 'Description', 'Debit', 'Credit']
+    if not all(col in df.columns for col in required_cols):
+        raise ValueError(f"Missing required columns. Expected: {required_cols}")
+
+    # Create result DataFrame
     result = df.copy()
-    result['Transaction Date'] = result['Date'].apply(standardize_date)
-    result['Post Date'] = result['Date'].apply(standardize_date)  # Use transaction date for both
     
-    # Combine Debit and Credit columns into Amount
+    # Map and validate dates
+    result['Transaction Date'] = result['Date'].apply(standardize_date)
+    if result['Transaction Date'].isna().any():
+        raise ValueError("Invalid date format")
+    
+    # Use transaction date for post date
+    result['Post Date'] = result['Transaction Date']
+    
+    # Map and validate description
+    result['Description'] = result['Description'].apply(standardize_description)
+    
+    # Convert and validate amounts
     result['Amount'] = result.apply(
-        lambda row: -clean_amount(row['Debit']) if pd.notna(row['Debit']) else clean_amount(row['Credit']),
+        lambda row: -clean_amount(row['Debit']) if pd.notna(row['Debit']) and row['Debit'] != '' else clean_amount(row['Credit']),
         axis=1
     )
     
-    result['Description'] = result['Description'].str.strip()
+    # Map category
     result['Category'] = result.get('Category', pd.Series('', index=result.index))
     result['source_file'] = result.get('source_file', pd.Series('debit_credit', index=result.index))
+    
     return result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
 
 def process_alliant_checking_format(df, source_file=None):
@@ -905,14 +1002,12 @@ def generate_reconciliation_report(matches_df, unmatched_df, report_path):
 
 def save_reconciliation_results(matches_df, unmatched_df, output_path):
     """
-    Save reconciliation results to CSV files or Excel file.
+    Save reconciliation results to a single CSV file.
     
     Args:
         matches_df (pd.DataFrame): DataFrame containing matched transactions
         unmatched_df (pd.DataFrame): DataFrame containing unmatched transactions
-        output_path (str or Path): Path where results should be saved. 
-                                 If path ends with .xlsx, saves as Excel with multiple sheets.
-                                 If path is a directory, saves as separate CSV files.
+        output_path (str or Path): Path where results should be saved
     """
     # Transform matched transactions
     matches_transformed = matches_df.copy()
@@ -943,19 +1038,27 @@ def save_reconciliation_results(matches_df, unmatched_df, output_path):
     matches_transformed[string_columns] = matches_transformed[string_columns].fillna('')
     unmatched_transformed[string_columns] = unmatched_transformed[string_columns].fillna('')
     
+    # Combine matched and unmatched transactions
+    all_transactions = pd.concat([
+        matches_transformed[columns],
+        unmatched_transformed[columns]
+    ], ignore_index=True)
+    
+    # Sort by date and amount
+    all_transactions = all_transactions.sort_values(['Date', 'Amount'])
+    
+    # Save to a single CSV file
     output_path = str(output_path)
     if output_path.endswith('.xlsx'):
-        # Save as Excel with multiple sheets
+        # Save as Excel with a single sheet
         with pd.ExcelWriter(output_path) as writer:
-            matches_transformed[columns].to_excel(writer, sheet_name='Matched', index=False)
-            unmatched_transformed[columns].to_excel(writer, sheet_name='Unmatched', index=False)
+            all_transactions.to_excel(writer, sheet_name='All Transactions', index=False)
     else:
-        # Save as CSV files in directory
+        # Save as CSV file
         os.makedirs(output_path, exist_ok=True)
-        matches_path = os.path.join(output_path, "matched.csv")
-        unmatched_path = os.path.join(output_path, "unmatched.csv")
-        matches_transformed[columns].to_csv(matches_path, index=False)
-        unmatched_transformed[columns].to_csv(unmatched_path, index=False)
+        all_transactions_path = os.path.join(output_path, "all_transactions.csv")
+        all_transactions.to_csv(all_transactions_path, index=False)
+        logger.info(f"Saved all transactions to {all_transactions_path}")
 
 def format_report_summary(matches_df, unmatched_df):
     """

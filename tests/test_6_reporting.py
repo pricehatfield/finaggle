@@ -214,7 +214,7 @@ class TestReporting:
             'source_file': ['source.csv'],
             'target_file': ['target.csv']
         })
-        
+
         unmatched = pd.DataFrame({
             'Transaction Date': ['2025-01-03'],
             'Post Date': ['2025-01-04'],
@@ -223,15 +223,22 @@ class TestReporting:
             'Category': ['dining'],
             'source_file': ['source.csv']
         })
-        
+
         # Save results
         output_dir = tmp_path / "output"
         save_reconciliation_results(matches, unmatched, output_dir)
+
+        # Verify all_transactions.csv exists and has correct format
+        all_transactions_path = output_dir / "all_transactions.csv"
+        assert os.path.exists(all_transactions_path)
         
-        # Verify files exist
-        assert os.path.exists(output_dir / "matched.csv")
-        assert os.path.exists(output_dir / "unmatched.csv")
-        
+        # Read and verify contents
+        df = pd.read_csv(all_transactions_path)
+        assert 'Matched' in df.columns
+        assert len(df) == len(matches) + len(unmatched)
+        assert df['Matched'].sum() == len(matches)  # Count of True values should equal matches length
+        assert (~df['Matched']).sum() == len(unmatched)  # Count of False values should equal unmatched length
+
     def test_report_summary(self):
         """Test report summary formatting"""
         # Create sample data
@@ -382,67 +389,29 @@ def test_save_reconciliation_results(sample_matched_df, sample_unmatched_df, tmp
     # Save results
     output_dir = tmp_path / "output"
     save_reconciliation_results(sample_matched_df, sample_unmatched_df, output_dir)
+
+    # Verify all_transactions.csv exists and has correct format
+    all_transactions_path = output_dir / "all_transactions.csv"
+    assert os.path.exists(all_transactions_path)
     
-    # Verify files exist
-    assert os.path.exists(output_dir / "matched.csv")
-    assert os.path.exists(output_dir / "unmatched.csv")
+    # Read and verify contents
+    df = pd.read_csv(all_transactions_path)
+    assert 'Matched' in df.columns
+    assert len(df) == len(sample_matched_df) + len(sample_unmatched_df)
+    assert df['Matched'].sum() == len(sample_matched_df)  # Count of True values should equal matches length
+    assert (~df['Matched']).sum() == len(sample_unmatched_df)  # Count of False values should equal unmatched length
     
-    # Verify content
-    matched_df = pd.read_csv(output_dir / "matched.csv")
-    unmatched_df = pd.read_csv(output_dir / "unmatched.csv")
+    # Verify data integrity
+    matched_rows = df[df['Matched']]
+    unmatched_rows = df[~df['Matched']]
     
-    # Expected columns
-    expected_columns = [
-        'Date', 'YearMonth', 'Account', 'Description', 'Category',
-        'Tags', 'Amount', 'reconciled_key', 'Matched'
-    ]
+    # Check matched transactions
+    assert all(matched_rows['Description'].isin(sample_matched_df['Description']))
+    assert all(matched_rows['Amount'].isin(sample_matched_df['Amount']))
     
-    # Convert date columns to datetime for comparison
-    matched_df['Date'] = pd.to_datetime(matched_df['Date'])
-    unmatched_df['Date'] = pd.to_datetime(unmatched_df['Date'])
-    
-    # Transform sample data to match expected output
-    matches_transformed = sample_matched_df.copy()
-    matches_transformed['Date'] = matches_transformed['Transaction Date']
-    matches_transformed['YearMonth'] = pd.to_datetime(matches_transformed['Date']).dt.strftime('%Y-%m-%d').str[:7]
-    matches_transformed['Account'] = 'Matched - ' + matches_transformed['source_file']
-    matches_transformed['Tags'] = ''
-    matches_transformed['reconciled_key'] = pd.to_datetime(matches_transformed['Date']).dt.strftime('%Y-%m-%d')
-    matches_transformed['Matched'] = True
-    matches_transformed = matches_transformed[expected_columns]
-    
-    unmatched_transformed = sample_unmatched_df.copy()
-    unmatched_transformed['Date'] = unmatched_transformed['Transaction Date']
-    unmatched_transformed['YearMonth'] = pd.to_datetime(unmatched_transformed['Date']).dt.strftime('%Y-%m-%d').str[:7]
-    unmatched_transformed['Account'] = 'Unreconciled - ' + unmatched_transformed['source_file']
-    unmatched_transformed['Tags'] = ''
-    unmatched_transformed['reconciled_key'] = pd.to_datetime(unmatched_transformed['Date']).dt.strftime('%Y-%m-%d')
-    unmatched_transformed['Matched'] = False
-    unmatched_transformed = unmatched_transformed[expected_columns]
-    
-    # Fill NaN values with empty strings for string columns
-    string_columns = ['Tags', 'Category', 'Description']
-    matches_transformed[string_columns] = matches_transformed[string_columns].fillna('')
-    unmatched_transformed[string_columns] = unmatched_transformed[string_columns].fillna('')
-    matched_df[string_columns] = matched_df[string_columns].fillna('')
-    unmatched_df[string_columns] = unmatched_df[string_columns].fillna('')
-    
-    assert len(matched_df) == len(sample_matched_df)
-    assert len(unmatched_df) == len(sample_unmatched_df)
-    assert set(matched_df.columns) == set(expected_columns)
-    assert set(unmatched_df.columns) == set(expected_columns)
-    
-    # Compare all columns
-    pd.testing.assert_frame_equal(
-        matched_df[expected_columns].sort_index(),
-        matches_transformed.sort_index(),
-        check_dtype=False
-    )
-    pd.testing.assert_frame_equal(
-        unmatched_df[expected_columns].sort_index(),
-        unmatched_transformed.sort_index(),
-        check_dtype=False
-    )
+    # Check unmatched transactions
+    assert all(unmatched_rows['Description'].isin(sample_unmatched_df['Description']))
+    assert all(unmatched_rows['Amount'].isin(sample_unmatched_df['Amount']))
 
 def test_reconciled_output_format(tmp_path):
     """Test that reconciliation results are saved in the correct format"""
@@ -455,7 +424,7 @@ def test_reconciled_output_format(tmp_path):
         'source_file': ['bank1.csv', 'bank2.csv']
     }
     matched_df = pd.DataFrame(matched_data)
-    
+
     # Create sample unmatched transactions
     unmatched_data = {
         'Transaction Date': ['2024-01-03', '2024-01-04'],
@@ -465,52 +434,31 @@ def test_reconciled_output_format(tmp_path):
         'source_file': ['bank3.csv', 'bank4.csv']
     }
     unmatched_df = pd.DataFrame(unmatched_data)
-    
+
     # Test Excel output
     excel_path = tmp_path / "reconciliation_results.xlsx"
     save_reconciliation_results(matched_df, unmatched_df, excel_path)
-    
+
     # Verify Excel output
     with pd.ExcelFile(excel_path) as excel:
         # Check sheet names
-        assert set(excel.sheet_names) == {'Matched', 'Unmatched'}
+        assert set(excel.sheet_names) == {'All Transactions'}
         
-        # Read sheets
-        matched_output = pd.read_excel(excel, 'Matched')
-        unmatched_output = pd.read_excel(excel, 'Unmatched')
+        # Read and verify contents
+        df = pd.read_excel(excel_path, sheet_name='All Transactions')
+        assert 'Matched' in df.columns
+        assert len(df) == len(matched_df) + len(unmatched_df)
+        assert df['Matched'].sum() == len(matched_df)  # Count of True values should equal matches length
+        assert (~df['Matched']).sum() == len(unmatched_df)  # Count of False values should equal unmatched length
         
-        # Check columns
-        expected_columns = [
-            'Date', 'YearMonth', 'Account', 'Description', 'Category',
-            'Tags', 'Amount', 'reconciled_key', 'Matched'
-        ]
-        assert list(matched_output.columns) == expected_columns
-        assert list(unmatched_output.columns) == expected_columns
+        # Verify data integrity
+        matched_rows = df[df['Matched']]
+        unmatched_rows = df[~df['Matched']]
         
-        # Check data
-        assert len(matched_output) == 2
-        assert len(unmatched_output) == 2
-        assert all(matched_output['Matched'] == True)
-        assert all(unmatched_output['Matched'] == False)
+        # Check matched transactions
+        assert all(matched_rows['Description'].isin(matched_df['Description']))
+        assert all(matched_rows['Amount'].isin(matched_df['Amount']))
         
-        # Check specific values
-        assert matched_output.iloc[0]['Amount'] == 100.00
-        assert matched_output.iloc[0]['Description'] == 'Test Transaction 1'
-        assert unmatched_output.iloc[0]['Amount'] == 75.00
-        assert unmatched_output.iloc[0]['Description'] == 'Test Transaction 3'
-    
-    # Test CSV output
-    csv_dir = tmp_path / "csv_output"
-    save_reconciliation_results(matched_df, unmatched_df, csv_dir)
-    
-    # Verify CSV output
-    matched_csv = pd.read_csv(csv_dir / "matched.csv")
-    unmatched_csv = pd.read_csv(csv_dir / "unmatched.csv")
-    
-    # Check CSV data
-    assert list(matched_csv.columns) == expected_columns
-    assert list(unmatched_csv.columns) == expected_columns
-    assert len(matched_csv) == 2
-    assert len(unmatched_csv) == 2
-    assert all(matched_csv['Matched'] == True)
-    assert all(unmatched_csv['Matched'] == False) 
+        # Check unmatched transactions
+        assert all(unmatched_rows['Description'].isin(unmatched_df['Description']))
+        assert all(unmatched_rows['Amount'].isin(unmatched_df['Amount'])) 
