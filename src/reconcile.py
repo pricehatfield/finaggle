@@ -711,44 +711,90 @@ def reconcile_transactions(aggregator_df, detail_records):
     
     return matches_df, unmatched_df
 
-def import_transactions(file_path):
-    """Import transactions from a file.
-
-    Args:
-        file_path (str): Path to the file to import
-
-    Returns:
-        pd.DataFrame: DataFrame with standardized transactions
+def import_csv(file_path):
     """
-    # Check if file exists
-    if not os.path.exists(file_path):
-        raise ValueError(f"File not found: {file_path}")
-
-    # Check if path is a directory
-    if os.path.isdir(file_path):
-        raise ValueError(f"Path is a directory, not a file: {file_path}")
-
-    # Get file extension
-    _, ext = os.path.splitext(file_path)
-    ext = ext.lower()
-
-    # Read file based on extension
+    Import transactions from a file.
+    
+    Decision Hierarchy:
+    1. Check if file exists
+    2. Check if it's a directory
+    3. Check if it's a supported file type (case-insensitive)
+       - CSV files: .csv or .CSV
+       - Excel files: .xlsx or .XLSX
+    4. Check filename pattern for format processor
+    5. For unknown formats, check required columns
+    
+    Args:
+        file_path (str or Path): Path to the file to import
+        
+    Returns:
+        pd.DataFrame: Standardized transaction data
+        
+    Raises:
+        FileNotFoundError: If file does not exist
+        ValueError: If file format is not supported or data is malformed
+    """
+    # Convert to Path object if string
+    if isinstance(file_path, str):
+        file_path = pathlib.Path(file_path)
+    
+    # 1. Check if file exists
+    if not file_path.exists():
+        raise FileNotFoundError(f"File not found: {file_path}")
+    
+    # 2. Check if path is a directory
+    if file_path.is_dir():
+        raise ValueError(f"Path is a directory: {file_path}")
+    
+    # 3. Check if it's a supported file type (case-insensitive)
+    ext = file_path.suffix.lower()
     if ext == '.csv':
         df = pd.read_csv(file_path)
     elif ext == '.xlsx':
         df = pd.read_excel(file_path)
     else:
-        raise ValueError(f"Unsupported file format: {ext}")
-
-    # Process based on format
-    if 'Card Member' in df.columns and 'Account #' in df.columns:
-        return process_amex_format(df, file_path)
-    elif 'Date' in df.columns and 'Post Date' in df.columns and 'Amount' in df.columns:
-        return process_alliant_visa_format(df, file_path)
-    elif 'Date' in df.columns and 'Description' in df.columns and 'Amount' in df.columns:
-        return process_alliant_checking_format(df, file_path)
-    else:
-        raise ValueError("Unsupported file format")
+        raise ValueError(f"Unsupported file format: {file_path.suffix}. Supported formats: .csv, .CSV, .xlsx, .XLSX")
+    
+    # 4. Check filename pattern for format processor
+    filename = file_path.stem  # Get filename without extension
+    filename_lower = filename.lower()
+    
+    if 'discover' in filename_lower:
+        result = process_discover_format(df)
+        result['source_file'] = filename
+        return result
+    elif 'capital_one' in filename_lower:
+        result = process_capital_one_format(df)
+        result['source_file'] = filename
+        return result
+    elif 'chase' in filename_lower:
+        result = process_chase_format(df)
+        result['source_file'] = filename
+        return result
+    elif 'alliant_checking' in filename_lower:
+        result = process_alliant_checking_format(df)
+        result['source_file'] = filename
+        return result
+    elif 'alliant_visa' in filename_lower:
+        result = process_alliant_visa_format(df)
+        result['source_file'] = filename
+        return result
+    elif 'amex' in filename_lower:
+        result = process_amex_format(df)
+        result['source_file'] = filename
+        return result
+    elif 'empower' in filename_lower:
+        result = process_aggregator_format(df)
+        result['source_file'] = filename
+        return result
+    
+    # 5. For unknown formats, check required columns
+    required_columns = ['Transaction Date', 'Description', 'Amount']
+    if not all(col in df.columns for col in required_columns):
+        raise ValueError(f"Missing required columns in {file_path}. Required: {required_columns}")
+    
+    df['source_file'] = filename
+    return df
 
 def import_folder(folder_path):
     """
@@ -783,7 +829,7 @@ def import_folder(folder_path):
     results = []
     for file_path in csv_files:
         try:
-            df = import_transactions(file_path)
+            df = import_csv(file_path)
             results.append(df)
         except Exception as e:
             logger.error(f"Error importing {file_path}: {str(e)}")
@@ -831,7 +877,7 @@ def generate_reconciliation_report(matches_df, unmatched_df, report_path):
     if not matches_df.empty:
         for _, row in matches_df.iterrows():
             report_content.append(
-                f"Date: {row['Transaction Date']} | "
+                f"Date: {row['Date']} | "
                 f"Description: {row['Description']} | "
                 f"Amount: ${abs(row['Amount']):.2f} | "
                 f"Category: {row['Category']}\n"
@@ -844,11 +890,11 @@ def generate_reconciliation_report(matches_df, unmatched_df, report_path):
     if not unmatched_df.empty:
         for _, row in unmatched_df.iterrows():
             report_content.append(
-                f"Date: {row['Transaction Date']} | "
+                f"Date: {row['Date']} | "
                 f"Description: {row['Description']} | "
                 f"Amount: ${abs(row['Amount']):.2f} | "
                 f"Category: {row['Category']} | "
-                f"Source: {row['source_file']}\n"
+                f"Source: {row['Account']}\n"
             )
     else:
         report_content.append("No unmatched transactions found.\n")
@@ -857,25 +903,59 @@ def generate_reconciliation_report(matches_df, unmatched_df, report_path):
     with open(report_path, 'w') as f:
         f.writelines(report_content)
 
-def save_reconciliation_results(matches_df, unmatched_df, output_dir):
+def save_reconciliation_results(matches_df, unmatched_df, output_path):
     """
-    Save reconciliation results to CSV files.
+    Save reconciliation results to CSV files or Excel file.
     
     Args:
         matches_df (pd.DataFrame): DataFrame containing matched transactions
         unmatched_df (pd.DataFrame): DataFrame containing unmatched transactions
-        output_dir (str or Path): Directory where the files should be saved
+        output_path (str or Path): Path where results should be saved. 
+                                 If path ends with .xlsx, saves as Excel with multiple sheets.
+                                 If path is a directory, saves as separate CSV files.
     """
-    # Ensure output directory exists
-    os.makedirs(output_dir, exist_ok=True)
+    # Transform matched transactions
+    matches_transformed = matches_df.copy()
+    matches_transformed['Date'] = matches_transformed['Transaction Date']
+    matches_transformed['YearMonth'] = pd.to_datetime(matches_transformed['Date']).dt.strftime('%Y-%m-%d').str[:7]
+    matches_transformed['Account'] = 'Matched - ' + matches_transformed['source_file']
+    matches_transformed['Tags'] = ''
+    matches_transformed['reconciled_key'] = matches_transformed['Date']
+    matches_transformed['Matched'] = True
     
-    # Save matched transactions
-    matches_path = os.path.join(output_dir, "matched.csv")
-    matches_df.to_csv(matches_path, index=False)
+    # Transform unmatched transactions
+    unmatched_transformed = unmatched_df.copy()
+    unmatched_transformed['Date'] = unmatched_transformed['Transaction Date']
+    unmatched_transformed['YearMonth'] = pd.to_datetime(unmatched_transformed['Date']).dt.strftime('%Y-%m-%d').str[:7]
+    unmatched_transformed['Account'] = 'Unreconciled - ' + unmatched_transformed['source_file']
+    unmatched_transformed['Tags'] = ''
+    unmatched_transformed['reconciled_key'] = unmatched_transformed['Date']
+    unmatched_transformed['Matched'] = False
     
-    # Save unmatched transactions
-    unmatched_path = os.path.join(output_dir, "unmatched.csv")
-    unmatched_df.to_csv(unmatched_path, index=False)
+    # Select and order columns
+    columns = [
+        'Date', 'YearMonth', 'Account', 'Description', 'Category',
+        'Tags', 'Amount', 'reconciled_key', 'Matched'
+    ]
+    
+    # Fill NaN values with empty strings for string columns
+    string_columns = ['Tags', 'Category', 'Description']
+    matches_transformed[string_columns] = matches_transformed[string_columns].fillna('')
+    unmatched_transformed[string_columns] = unmatched_transformed[string_columns].fillna('')
+    
+    output_path = str(output_path)
+    if output_path.endswith('.xlsx'):
+        # Save as Excel with multiple sheets
+        with pd.ExcelWriter(output_path) as writer:
+            matches_transformed[columns].to_excel(writer, sheet_name='Matched', index=False)
+            unmatched_transformed[columns].to_excel(writer, sheet_name='Unmatched', index=False)
+    else:
+        # Save as CSV files in directory
+        os.makedirs(output_path, exist_ok=True)
+        matches_path = os.path.join(output_path, "matched.csv")
+        unmatched_path = os.path.join(output_path, "unmatched.csv")
+        matches_transformed[columns].to_csv(matches_path, index=False)
+        unmatched_transformed[columns].to_csv(unmatched_path, index=False)
 
 def format_report_summary(matches_df, unmatched_df):
     """
@@ -892,7 +972,7 @@ def format_report_summary(matches_df, unmatched_df):
         ValueError: If required columns are missing
     """
     # Validate required columns
-    required_columns = ['Transaction Date', 'Post Date', 'Description', 'Amount']
+    required_columns = ['Date', 'Description', 'Amount']
     for df in [matches_df, unmatched_df]:
         if not df.empty and not all(col in df.columns for col in required_columns):
             raise ValueError("Missing required columns in DataFrame")
@@ -944,7 +1024,7 @@ def main():
     try:
         # Import aggregator data
         logger.info("Importing aggregator data")
-        aggregator_df = import_transactions("data/2025/empower_2025.csv")
+        aggregator_df = import_csv("data/2025/empower_2025.csv")
         
         # Import and process detail data
         logger.info("Importing and processing detail data")
@@ -952,7 +1032,7 @@ def main():
         for file in os.listdir("data/2025/details"):
             if file.endswith(".csv"):
                 logger.info(f"Processing {file}")
-                df = import_transactions(os.path.join("data/2025/details", file))
+                df = import_csv(os.path.join("data/2025/details", file))
                 detail_dfs.append(df)
         
         # Reconcile transactions

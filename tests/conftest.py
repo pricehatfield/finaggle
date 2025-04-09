@@ -160,4 +160,86 @@ def sample_transactions_df():
             '2025-01-15'
         ],
         'Matched': [True] * 5 + [False] * 3
+    })
+
+@pytest.fixture
+def sample_matched_df():
+    """Sample matched transactions DataFrame."""
+    return pd.DataFrame({
+        'Date': ['2025-01-01', '2025-01-03', '2025-01-05', '2025-01-07', '2025-01-09'],
+        'YearMonth': ['2025-01'] * 5,
+        'Account': [
+            'Matched - alliant_checking_2025.csv',
+            'Matched - alliant_visa_2025.csv',
+            'Matched - amex_2025.csv',
+            'Matched - alliant_checking_2025.csv',
+            'Matched - alliant_visa_2025.csv'
+        ],
+        'Description': [
+            'Grocery Store',
+            'Gas Station',
+            'Restaurant',
+            'Salary',
+            'Online Shopping'
+        ],
+        'Amount': [-50.00, -30.00, -75.00, 2000.00, -100.00],
+        'Category': [
+            'Groceries',
+            'Transportation',
+            'Dining',
+            'Income',
+            'Shopping'
+        ],
+        'Tags': [''] * 5,
+        'reconciled_key': [
+            '2025-01-01',
+            '2025-01-03',
+            '2025-01-05',
+            '2025-01-07',
+            '2025-01-09'
+        ],
+        'Matched': [True] * 5,
+        'Transaction Date': ['2025-01-01', '2025-01-03', '2025-01-05', '2025-01-07', '2025-01-09'],
+        'Post Date': ['2025-01-02', '2025-01-04', '2025-01-06', '2025-01-08', '2025-01-10'],
+        'source_file': [
+            'alliant_checking_2025.csv',
+            'alliant_visa_2025.csv',
+            'amex_2025.csv',
+            'alliant_checking_2025.csv',
+            'alliant_visa_2025.csv'
+        ]
+    })
+
+@pytest.fixture
+def sample_unmatched_df():
+    """Sample unmatched transactions DataFrame."""
+    return pd.DataFrame({
+        'Date': ['2025-01-11', '2025-01-13', '2025-01-15'],
+        'YearMonth': ['2025-01'] * 3,
+        'Account': [
+            'Unreconciled - alliant_checking_2025.csv',
+            'Unreconciled - alliant_visa_2025.csv',
+            'Unreconciled - amex_2025.csv'
+        ],
+        'Description': [
+            'Unknown Transaction',
+            'Pending Charge',
+            'Disputed Transaction'
+        ],
+        'Amount': [-25.00, -45.00, -60.00],
+        'Category': ['Uncategorized'] * 3,
+        'Tags': [''] * 3,
+        'reconciled_key': [
+            '2025-01-11',
+            '2025-01-13',
+            '2025-01-15'
+        ],
+        'Matched': [False] * 3,
+        'Transaction Date': ['2025-01-11', '2025-01-13', '2025-01-15'],
+        'Post Date': ['2025-01-12', '2025-01-14', '2025-01-16'],
+        'source_file': [
+            'alliant_checking_2025.csv',
+            'alliant_visa_2025.csv',
+            'amex_2025.csv'
+        ]
     }) 

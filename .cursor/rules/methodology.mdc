@@ -1,0 +1,136 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Data Processing Hierarchy and Methodology
+
+## Hierarchy Overview
+
+The project follows a strict hierarchical approach to data processing, with each layer serving as a source of truth for the layer below it:
+
+```
+Data Files (Source of Truth)
+    ↓
+Specifications (Documentation)
+    ↓
+Tests (Validation)
+    ↓
+Implementation (Code)
+```
+
+## Layer Details
+
+### 1. Data Files
+- **Location**: `data/` directory
+- **Purpose**: Real-world examples of each format
+- **Role**: Source of truth for actual data structure
+- **Examples**:
+  - `data/2025/empower_2025.csv` (Aggregator)
+  - `data/2025/details/discover_2025.csv`
+  - `data/2025/details/capital_one_2025.csv`
+
+### 2. Specifications
+- **Location**: `README.md`
+- **Purpose**: Defines exact format specifications
+- **Role**: Source of truth for expected formats
+- **Content**:
+  - File patterns (e.g., `discover_*.csv`)
+  - Column definitions
+  - Data type requirements
+  - Format-specific rules
+- **Example**:
+  ```markdown
+  ### Discover
+  - **File Pattern**: `discover_*.csv`
+  - **Columns**:
+    - `Trans. Date`: MM/DD/YYYY
+    - `Post Date`: MM/DD/YYYY
+    - `Description`: String
+    - `Amount`: Decimal
+    - `Category`: String
+  ```
+
+### 3. Tests
+- **Location**: `tests/` directory
+- **Purpose**: Validates format processing and standardization
+- **Role**: Source of truth for processing requirements
+- **Key Files**:
+  - `test_2_file_formats.py`: Format validation
+  - `test_4_format_standardization.py`: Data standardization
+- **Test Data**: Mirrors README specifications
+- **Validation Points**:
+  - Required columns
+  - Data types
+  - Format-specific rules
+  - Standardized output format
+
+### 4. Implementation
+- **Location**: `src/reconcile.py`
+- **Purpose**: Actual processing code
+- **Role**: Implements specifications and passes tests
+- **Key Components**:
+  - Format processors (e.g., `process_discover_format`)
+  - Standardization functions
+  - Validation checks
+  - Error handling
+
+## Methodology
+
+### 1. Data Flow
+1. Read data files
+2. Validate against specifications
+3. Process according to format rules
+4. Standardize to common format
+5. Validate output against tests
+
+### 2. Validation Chain
+- Implementation must pass all tests
+- Tests must match specifications
+- Specifications must match data files
+- Data files must be real-world examples
+
+### 3. Error Handling
+- Invalid formats raise `ValueError`
+- Missing columns raise `ValueError`
+- Invalid data types raise `ValueError`
+- File not found raises `FileNotFoundError`
+
+### 4. Standardized Output Format
+```python
+{
+    'Transaction Date': 'YYYY-MM-DD',
+    'Post Date': 'YYYY-MM-DD',
+    'Description': 'String',
+    'Amount': 'Decimal (negative for debits)',
+    'Category': 'String',
+    'source_file': 'String'
+}
+```
+
+## Best Practices
+
+1. **When Adding New Formats**
+   - Add sample data file
+   - Update README specifications
+   - Create test data fixture
+   - Implement processor function
+   - Add validation tests
+
+2. **When Modifying Existing Formats**
+   - Update README first
+   - Update test data
+   - Modify implementation
+   - Run all tests
+
+3. **When Debugging**
+   - Start with data files
+   - Check specifications
+   - Review test expectations
+   - Examine implementation
+
+4. **When Testing**
+   - Run specific test files
+   - Generate HTML reports
+   - Check test fixtures
+   - Validate against specifications 

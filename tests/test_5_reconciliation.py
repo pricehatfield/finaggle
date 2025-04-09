@@ -83,6 +83,42 @@ def sample_aggregator_df():
         'source_file': ['aggregator.csv']
     })
 
+@pytest.fixture
+def sample_matched_df():
+    """Create a sample DataFrame of matched transactions"""
+    return pd.DataFrame({
+        'Transaction Date': pd.to_datetime(['2025-03-17', '2025-03-18']),
+        'Post Date': pd.to_datetime(['2025-03-18', '2025-03-19']),
+        'Description': ['AMAZON.COM', 'WALMART'],
+        'Amount': [-40.33, -25.99],
+        'Category': ['Shopping', 'Groceries'],
+        'source_file': ['discover.csv', 'capital_one.csv'],
+        'Date': pd.to_datetime(['2025-03-17', '2025-03-18']),
+        'YearMonth': ['2025-03', '2025-03'],
+        'Account': ['Matched - discover.csv', 'Matched - capital_one.csv'],
+        'Tags': ['', ''],
+        'reconciled_key': ['2025-03-17', '2025-03-18'],
+        'Matched': [True, True]
+    })
+
+@pytest.fixture
+def sample_unmatched_df():
+    """Create a sample DataFrame of unmatched transactions"""
+    return pd.DataFrame({
+        'Transaction Date': pd.to_datetime(['2025-03-19', '2025-03-20']),
+        'Post Date': pd.to_datetime(['2025-03-20', '2025-03-21']),
+        'Description': ['TARGET', 'COSTCO'],
+        'Amount': [-75.50, -150.25],
+        'Category': ['Shopping', 'Groceries'],
+        'source_file': ['chase.csv', 'amex.csv'],
+        'Date': pd.to_datetime(['2025-03-19', '2025-03-20']),
+        'YearMonth': ['2025-03', '2025-03'],
+        'Account': ['Unreconciled - chase.csv', 'Unreconciled - amex.csv'],
+        'Tags': ['', ''],
+        'reconciled_key': ['2025-03-19', '2025-03-20'],
+        'Matched': [False, False]
+    })
+
 def test_setup_logging(tmp_path, monkeypatch):
     """Test logging setup"""
     log_file = tmp_path / 'test.log'
@@ -280,6 +316,33 @@ class TestReconciliation:
         matches, unmatched = reconcile_transactions(source_df, [target_df])
         assert len(matches) == 0
         assert len(unmatched) == 2
+
+    def test_reconciled_output_format(self, sample_matched_df, sample_unmatched_df):
+        """Test the format of reconciled output"""
+        # Test matched transactions format
+        assert not sample_matched_df.empty
+        required_columns = [
+            'Transaction Date', 'Post Date', 'Description', 'Amount', 'Category',
+            'source_file', 'Date', 'YearMonth', 'Account', 'Tags', 'reconciled_key', 'Matched'
+        ]
+        assert all(col in sample_matched_df.columns for col in required_columns)
+        
+        # Test unmatched transactions format
+        assert not sample_unmatched_df.empty
+        assert all(col in sample_unmatched_df.columns for col in required_columns)
+        
+        # Test data types
+        assert pd.api.types.is_datetime64_any_dtype(sample_matched_df['Transaction Date'])
+        assert pd.api.types.is_datetime64_any_dtype(sample_matched_df['Post Date'])
+        assert pd.api.types.is_datetime64_any_dtype(sample_matched_df['Date'])
+        assert pd.api.types.is_float_dtype(sample_matched_df['Amount'])
+        assert pd.api.types.is_string_dtype(sample_matched_df['Description'])
+        assert pd.api.types.is_string_dtype(sample_matched_df['Category'])
+        assert pd.api.types.is_string_dtype(sample_matched_df['source_file'])
+        assert pd.api.types.is_string_dtype(sample_matched_df['Account'])
+        assert pd.api.types.is_string_dtype(sample_matched_df['Tags'])
+        assert pd.api.types.is_string_dtype(sample_matched_df['reconciled_key'])
+        assert pd.api.types.is_bool_dtype(sample_matched_df['Matched'])
 
 def test_calculate_discrepancies():
     """Test the calculate_discrepancies function"""

@@ -25,7 +25,9 @@ from .reconcile import (
     process_alliant_checking_format,
     process_alliant_visa_format,
     reconcile_transactions,
-    generate_reconciliation_report
+    generate_reconciliation_report,
+    import_csv,
+    import_folder
 )
 
 __all__ = [
@@ -37,5 +39,7 @@ __all__ = [
     'process_alliant_checking_format',
     'process_alliant_visa_format',
     'reconcile_transactions',
-    'generate_reconciliation_report'
+    'generate_reconciliation_report',
+    'import_csv',
+    'import_folder'
 ] 

@@ -75,12 +75,30 @@ def test_folder_import(tmp_path, create_test_df):
         df = create_test_df(format_name)
         file_path = tmp_path / f"{format_name}_test.csv"
         df.to_csv(file_path, index=False)
+        print(f"\nCreated file: {file_path}")
+        print(f"Content:\n{df}")
     
     # Import folder and validate
     result = import_folder(tmp_path)
-    assert not result.empty
-    assert len(result) == len(formats)
-    assert all(format_name in result['source_file'].values for format_name in formats)
+    print("\nImported results:")
+    for i, df in enumerate(result):
+        print(f"\nResult {i}:")
+        print(f"source_file: {df['source_file'].iloc[0]}")
+        print(f"DataFrame:\n{df}")
+    
+    assert len(result) > 0  # Should have at least one DataFrame
+    assert all(isinstance(df, pd.DataFrame) for df in result)  # All items should be DataFrames
+    assert all(not df.empty for df in result)  # No DataFrames should be empty
+    assert len(result) == len(formats)  # Should have one DataFrame per format
+    
+    # Sort both lists by source_file/format_name to ensure they match
+    result_sorted = sorted(result, key=lambda df: df['source_file'].iloc[0].lower())
+    formats_sorted = sorted(formats, key=str.lower)
+    
+    # Check that each DataFrame's source_file contains the format name (case-insensitive)
+    for df, format_name in zip(result_sorted, formats_sorted):
+        source_file = df['source_file'].iloc[0].lower()
+        assert format_name.lower() in source_file, f"Expected {format_name} in {source_file}"
 
 def test_invalid_file_handling(tmp_path):
     """Test handling of invalid files"""
@@ -126,4 +144,23 @@ def test_amount_sign_consistency(tmp_path, create_test_df):
         print(f"Amount dtype: {result['Amount'].dtype}")
         print(f"Amount values: {result['Amount'].values}")
         
-        assert result['Amount'].iloc[0] < 0, f"{format_name} amounts should be negative for debits" 
+        assert result['Amount'].iloc[0] < 0, f"{format_name} amounts should be negative for debits"
+
+def test_capitalized_file_extensions(tmp_path):
+    """Test handling of capitalized file extensions"""
+    # Create test CSV with capitalized extension
+    df = pd.DataFrame({
+        'Transaction Date': ['2025-01-01'],
+        'Post Date': ['2025-01-02'],
+        'Description': ['Test Transaction'],
+        'Amount': ['-50.00'],
+        'Category': ['Shopping']
+    })
+    file_path = tmp_path / "test.CSV"
+    df.to_csv(file_path, index=False)
+    
+    # Import and validate
+    result = import_csv(file_path)
+    assert not result.empty
+    assert all(col in result.columns for col in df.columns)
+    assert 'source_file' in result.columns 
