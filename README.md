@@ -107,6 +107,53 @@ matches, unmatched = reconcile_transactions(source_df, target_df)
 generate_reconciliation_report(matches, unmatched, "report.txt")
 ```
 
+## Output Format
+
+The reconciliation process generates two output files in the `output` directory:
+
+### Matched Transactions (matched.csv)
+- **Columns**:
+  - `Transaction Date`: YYYY-MM-DD
+  - `Post Date`: YYYY-MM-DD
+  - `Description`: String
+  - `Amount`: Decimal (negative for debits)
+  - `Category`: String
+  - `source_file`: String
+  - `match_type`: String (describes matching strategy used)
+    - `post_date_amount`: Matched on post date and amount
+    - `transaction_date_amount`: Matched on transaction date and amount
+
+### Unmatched Transactions (unmatched.csv)
+- **Columns**:
+  - `Transaction Date`: YYYY-MM-DD
+  - `Post Date`: YYYY-MM-DD
+  - `Description`: String
+  - `Amount`: Decimal (negative for debits)
+  - `Category`: String
+  - `source_file`: String
+
+### Potential Issues
+1. **Date Handling**: 
+   - The current format uses YYYY-MM-DD for all dates, which may differ from the input formats
+   - Post dates are required for matching, which may cause issues with formats that don't provide them
+
+2. **Amount Sign Convention**:
+   - All amounts are stored as negative for debits, which may differ from some input formats
+   - This convention is enforced during processing but may need adjustment for certain use cases
+
+3. **Category Standardization**:
+   - Categories are preserved from the source files
+   - No standardization is performed, which may lead to inconsistent categorization
+
+4. **Source Tracking**:
+   - The `source_file` column helps track where transactions originated
+   - However, it may not be clear which specific account or card the transaction came from
+
+5. **Match Type Limitation**:
+   - Primary matching uses post date and amount (`post_date_amount` match type)
+   - Secondary matching uses transaction date and amount (`transaction_date_amount` match type)
+   - No support for description-based matching or fuzzy matching
+
 ## Development
 
 ### Running Tests

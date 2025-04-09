@@ -248,64 +248,46 @@ def test_empty_results_handling(tmp_path):
         assert "No matched transactions found" in content
         assert "No unmatched transactions found" in content
 
-def test_output_format_validation(sample_matched_df, sample_unmatched_df):
+def test_output_format_validation(sample_transactions_df):
     """Test that output format follows specifications."""
-    # Test matched columns
-    required_matched_columns = [
-        'Transaction Date',
-        'Post Date',
+    # Test required columns
+    required_columns = [
+        'Date',
+        'YearMonth',
+        'Account',
         'Description',
-        'Amount',
         'Category',
-        'source_file',
-        'match_type'
-    ]
-    assert all(col in sample_matched_df.columns for col in required_matched_columns), \
-        f"Missing required columns in matched output. Expected: {required_matched_columns}, Got: {sample_matched_df.columns.tolist()}"
-
-    # Test unmatched columns
-    required_unmatched_columns = [
-        'Transaction Date',
-        'Post Date',
-        'Description',
+        'Tags',
         'Amount',
-        'Category',
-        'source_file'
+        'reconciled_key',
+        'Matched'
     ]
-    assert all(col in sample_unmatched_df.columns for col in required_unmatched_columns), \
-        f"Missing required columns in unmatched output. Expected: {required_unmatched_columns}, Got: {sample_unmatched_df.columns.tolist()}"
+    assert all(col in sample_transactions_df.columns for col in required_columns), \
+        f"Missing required columns in output. Expected: {required_columns}, Got: {sample_transactions_df.columns.tolist()}"
 
     # Test date formats
-    for df in [sample_matched_df, sample_unmatched_df]:
-        for date_col in ['Transaction Date', 'Post Date']:
-            pd.to_datetime(df[date_col], format='%Y-%m-%d')
+    assert pd.to_datetime(sample_transactions_df['Date']).dt.strftime('%Y-%m-%d').equals(sample_transactions_df['Date']), \
+        "Date must be in YYYY-MM-DD format"
+    
+    # Test YearMonth format
+    assert sample_transactions_df['YearMonth'].str.match(r'^\d{4}-\d{2}$').all(), \
+        "YearMonth must be in YYYY-MM format"
 
     # Test amount format
-    for df in [sample_matched_df, sample_unmatched_df]:
-        assert pd.api.types.is_numeric_dtype(df['Amount']), \
-            "Amount column should be numeric"
+    assert pd.api.types.is_numeric_dtype(sample_transactions_df['Amount']), \
+        "Amount column should be numeric"
 
-    # Test match type values
-    valid_match_types = {'post_date_amount', 'transaction_date_amount'}
-    assert all(match_type in valid_match_types for match_type in sample_matched_df['match_type'].unique()), \
-        f"Invalid match_type values found. Expected: {valid_match_types}"
+    # Test Matched format
+    assert pd.api.types.is_bool_dtype(sample_transactions_df['Matched']), \
+        "Matched should be boolean"
 
-    # Test source file format
-    for df in [sample_matched_df, sample_unmatched_df]:
-        assert all(isinstance(source, str) for source in df['source_file']), \
-            "source_file should be strings"
-        assert all(source.endswith('.csv') for source in df['source_file']), \
-            "source_file should end with .csv"
+    # Test reconciled_key format
+    assert pd.to_datetime(sample_transactions_df['reconciled_key']).dt.strftime('%Y-%m-%d').equals(sample_transactions_df['reconciled_key']), \
+        "reconciled_key must be in YYYY-MM-DD format"
 
-    # Test category format
-    for df in [sample_matched_df, sample_unmatched_df]:
-        assert all(isinstance(cat, str) for cat in df['Category']), \
-            "Category should be strings"
-
-    # Test description format
-    for df in [sample_matched_df, sample_unmatched_df]:
-        assert all(isinstance(desc, str) for desc in df['Description']), \
-            "Description should be strings"
+    # Test Account format
+    assert all(acc.startswith(('Matched - ', 'Unreconciled - ')) for acc in sample_transactions_df['Account']), \
+        "Account must start with 'Matched - ' or 'Unreconciled - '"
 
 def test_report_generation_with_matched_and_unmatched(sample_matched_df, sample_unmatched_df, tmp_path):
     """Test report generation with both matched and unmatched transactions."""
@@ -367,4 +349,62 @@ def test_save_reconciliation_results(sample_matched_df, sample_unmatched_df, tmp
     assert len(matched_df) == len(sample_matched_df)
     assert len(unmatched_df) == len(sample_unmatched_df)
     assert set(matched_df.columns) == set(sample_matched_df.columns)
-    assert set(unmatched_df.columns) == set(sample_unmatched_df.columns) 
+    assert set(unmatched_df.columns) == set(sample_unmatched_df.columns)
+
+def test_reconciled_output_format(tmp_path, sample_transactions_df):
+    """Test that reconciliation output matches the Excel format"""
+    # Split the sample data into matched and unmatched
+    matches = sample_transactions_df[sample_transactions_df['Matched']].copy()
+    unmatched = sample_transactions_df[~sample_transactions_df['Matched']].copy()
+    
+    # Generate report
+    report_path = tmp_path / "report.txt"
+    generate_reconciliation_report(matches, unmatched, report_path)
+    
+    # Verify report exists and has content
+    assert os.path.exists(report_path)
+    with open(report_path, 'r') as f:
+        content = f.read()
+        assert "Matched Transactions" in content
+        assert "Unmatched Transactions" in content
+    
+    # Verify output format
+    output_dir = tmp_path / "output"
+    save_reconciliation_results(matches, unmatched, output_dir)
+    
+    # Read the saved files
+    matched_df = pd.read_csv(output_dir / "matched.csv")
+    unmatched_df = pd.read_csv(output_dir / "unmatched.csv")
+    
+    # Verify matched transactions format
+    assert 'Date' in matched_df.columns
+    assert 'YearMonth' in matched_df.columns
+    assert 'Account' in matched_df.columns
+    assert 'Description' in matched_df.columns
+    assert 'Category' in matched_df.columns
+    assert 'Tags' in matched_df.columns
+    assert 'Amount' in matched_df.columns
+    assert 'reconciled_key' in matched_df.columns
+    assert 'Matched' in matched_df.columns
+    
+    # Verify unmatched transactions format
+    assert 'Date' in unmatched_df.columns
+    assert 'YearMonth' in unmatched_df.columns
+    assert 'Account' in unmatched_df.columns
+    assert 'Description' in unmatched_df.columns
+    assert 'Category' in unmatched_df.columns
+    assert 'Tags' in unmatched_df.columns
+    assert 'Amount' in unmatched_df.columns
+    assert 'reconciled_key' in unmatched_df.columns
+    assert 'Matched' in unmatched_df.columns
+    
+    # Verify specific values
+    assert matched_df['Date'].iloc[0] == '2025-01-01'
+    assert matched_df['YearMonth'].iloc[0] == '2025-01'
+    assert matched_df['Account'].iloc[0] == 'Matched - alliant_checking_2025.csv'
+    assert matched_df['Matched'].iloc[0] == True
+    
+    assert unmatched_df['Date'].iloc[0] == '2025-01-11'
+    assert unmatched_df['YearMonth'].iloc[0] == '2025-01'
+    assert unmatched_df['Account'].iloc[0] == 'Unreconciled - alliant_checking_2025.csv'
+    assert unmatched_df['Matched'].iloc[0] == False 

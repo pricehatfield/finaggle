@@ -96,28 +96,68 @@ def sample_standardized_df():
     })
 
 @pytest.fixture
-def sample_matched_df():
-    """Sample matched transactions after reconciliation."""
+def sample_transactions_df():
+    """Sample transactions DataFrame for testing reconciliation scenarios.
+    
+    Contains a mix of matched and unmatched transactions with various match conditions:
+    - Post date and amount matches
+    - Transaction date and amount matches
+    - Unmatched transactions
+    - Different account types
+    """
     return pd.DataFrame({
-        'Transaction Date': ['2025-01-01', '2025-01-03', '2025-01-05', '2025-01-07', '2025-01-09'],
-        'Post Date': ['2025-01-02', '2025-01-04', '2025-01-06', '2025-01-08', '2025-01-10'],
-        'Description': ['Grocery Store', 'Gas Station', 'Restaurant', 'Salary', 'Online Shopping'],
-        'Amount': [-50.00, -30.00, -75.00, 2000.00, -100.00],
-        'Category': ['Groceries', 'Transportation', 'Dining', 'Income', 'Shopping'],
-        'source_file': ['alliant_checking_2025.csv', 'alliant_visa_2025.csv', 'amex_2025.csv', 
-                       'alliant_checking_2025.csv', 'alliant_visa_2025.csv'],
-        'match_type': ['post_date_amount', 'transaction_date_amount', 'post_date_amount', 
-                      'post_date_amount', 'transaction_date_amount']
-    })
-
-@pytest.fixture
-def sample_unmatched_df():
-    """Sample unmatched transactions after reconciliation."""
-    return pd.DataFrame({
-        'Transaction Date': ['2025-01-11', '2025-01-13', '2025-01-15'],
-        'Post Date': ['2025-01-12', '2025-01-14', '2025-01-16'],
-        'Description': ['Unknown Transaction', 'Pending Charge', 'Disputed Transaction'],
-        'Amount': [-25.00, -45.00, -60.00],
-        'Category': ['Uncategorized', 'Uncategorized', 'Uncategorized'],
-        'source_file': ['alliant_checking_2025.csv', 'alliant_visa_2025.csv', 'amex_2025.csv']
+        'Date': [
+            '2025-01-01',  # Matched - post date
+            '2025-01-03',  # Matched - transaction date
+            '2025-01-05',  # Matched - post date
+            '2025-01-07',  # Matched - transaction date
+            '2025-01-09',  # Matched - post date
+            '2025-01-11',  # Unmatched
+            '2025-01-13',  # Unmatched
+            '2025-01-15'   # Unmatched
+        ],
+        'YearMonth': ['2025-01'] * 8,
+        'Account': [
+            'Matched - alliant_checking_2025.csv',
+            'Matched - alliant_visa_2025.csv',
+            'Matched - amex_2025.csv',
+            'Matched - alliant_checking_2025.csv',
+            'Matched - alliant_visa_2025.csv',
+            'Unreconciled - alliant_checking_2025.csv',
+            'Unreconciled - alliant_visa_2025.csv',
+            'Unreconciled - amex_2025.csv'
+        ],
+        'Description': [
+            'Grocery Store',
+            'Gas Station',
+            'Restaurant',
+            'Salary',
+            'Online Shopping',
+            'Unknown Transaction',
+            'Pending Charge',
+            'Disputed Transaction'
+        ],
+        'Amount': [-50.00, -30.00, -75.00, 2000.00, -100.00, -25.00, -45.00, -60.00],
+        'Category': [
+            'Groceries',
+            'Transportation',
+            'Dining',
+            'Income',
+            'Shopping',
+            'Uncategorized',
+            'Uncategorized',
+            'Uncategorized'
+        ],
+        'Tags': [''] * 8,
+        'reconciled_key': [
+            '2025-01-01',
+            '2025-01-03',
+            '2025-01-05',
+            '2025-01-07',
+            '2025-01-09',
+            '2025-01-11',
+            '2025-01-13',
+            '2025-01-15'
+        ],
+        'Matched': [True] * 5 + [False] * 3
     }) 

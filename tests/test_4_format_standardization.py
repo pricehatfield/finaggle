@@ -39,6 +39,8 @@ def create_test_df(format_name):
         return pd.DataFrame({
             'Date': ['03/17/2025'],
             'Description': ['AMAZON.COM'],
+            'Card Member': ['PRICE L HATFIELD'],
+            'Account #': ['-42004'],
             'Amount': ['123.45'],
             'Category': ['Shopping'],
             'source_file': ['amex_test.csv']
@@ -55,10 +57,10 @@ def create_test_df(format_name):
         })
     elif format_name == 'alliant_visa':
         return pd.DataFrame({
-            'Date': ['03/17/2025'],
+            'Date': ['2025-03-17'],
             'Description': ['AMAZON.COM'],
             'Amount': ['$123.45'],
-            'Post Date': ['03/18/2025'],
+            'Post Date': ['2025-03-18'],
             'Category': ['Shopping'],
             'source_file': ['alliant_test.csv']
         })
