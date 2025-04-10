@@ -365,3 +365,65 @@ def test_calculate_discrepancies():
     matches, unmatched = reconcile_transactions(source_df, [target_df])
     assert len(matches) == 0  # Should not match due to different amounts
     assert len(unmatched) == 2  # Both transactions should be unmatched 
+
+def create_test_aggregator_data():
+    """Create test data for aggregator format."""
+    return pd.DataFrame({
+        'Transaction Date': ['2025-03-17', '2025-03-18', '2025-03-19'],
+        'Post Date': ['2025-03-17', '2025-03-18', '2025-03-19'],
+        'Description': ['AMAZON.COM', 'NETFLIX.COM', 'WALMART'],
+        'Amount': [-40.33, -13.99, -50.00],
+        'Category': ['Shopping', 'Entertainment', 'Shopping'],
+        'Tags': ['Online', 'Subscription', 'Groceries'],
+        'source_file': ['aggregator', 'aggregator', 'aggregator']
+    })
+
+def create_test_detail_data():
+    """Create test data for detail format."""
+    return pd.DataFrame({
+        'Transaction Date': ['2025-03-17', '2025-03-18', '2025-03-19'],
+        'Post Date': ['2025-03-17', '2025-03-18', '2025-03-19'],
+        'Description': ['AMAZON.COM', 'NETFLIX.COM', 'WALMART'],
+        'Amount': [-40.33, -13.99, -50.00],
+        'Category': ['Shopping', 'Entertainment', 'Shopping'],
+        'source_file': ['discover', 'discover', 'discover']
+    })
+
+def test_tag_preservation():
+    """Test that tags from aggregator are preserved in reconciliation output.
+    
+    Verifies:
+    - Tags from aggregator are preserved in matched records
+    - Tags from aggregator are preserved in unmatched aggregator records
+    - Empty tags for unmatched detail records
+    """
+    # Create test data
+    aggregator_df = create_test_aggregator_data()
+    detail_df = create_test_detail_data()
+    
+    # Run reconciliation
+    matches_df, unmatched_df = reconcile_transactions(aggregator_df, [detail_df])
+    
+    # Check matched records
+    assert not matches_df.empty
+    assert 'Tags' in matches_df.columns
+    assert matches_df['Tags'].tolist() == ['Online', 'Subscription', 'Groceries']
+    
+    # Check unmatched records (should be empty in this case since all records match)
+    assert unmatched_df.empty
+
+    # Test with mismatched data to verify unmatched behavior
+    detail_df_modified = detail_df.copy()
+    detail_df_modified['Amount'] = [-41.33, -14.99, -51.00]  # Change amounts to force unmatched
+    
+    matches_df, unmatched_df = reconcile_transactions(aggregator_df, [detail_df_modified])
+    
+    # Check unmatched aggregator records
+    aggregator_unmatched = unmatched_df[unmatched_df['source_file'] == 'aggregator']
+    assert not aggregator_unmatched.empty
+    assert aggregator_unmatched['Tags'].tolist() == ['Online', 'Subscription', 'Groceries']
+    
+    # Check unmatched detail records
+    detail_unmatched = unmatched_df[unmatched_df['source_file'] == 'discover']
+    assert not detail_unmatched.empty
+    assert all(tag == '' for tag in detail_unmatched['Tags']) 

@@ -746,7 +746,7 @@ def reconcile_transactions(aggregator_df, detail_records):
                 match_row['Date'] = match_row['Transaction Date']
                 match_row['YearMonth'] = match_row['Date'][:7]  # YYYY-MM
                 match_row['Account'] = f"Matched - {source_file}"
-                match_row['Tags'] = ''
+                match_row['Tags'] = agg_row.get('Tags', '')  # Preserve tags from aggregator
                 match_row['reconciled_key'] = match_row['Date']
                 match_row['Matched'] = True
                 matches.append(match_row)
@@ -766,7 +766,7 @@ def reconcile_transactions(aggregator_df, detail_records):
                     match_row['Date'] = match_row['Transaction Date']
                     match_row['YearMonth'] = match_row['Date'][:7]  # YYYY-MM
                     match_row['Account'] = f"Matched - {source_file}"
-                    match_row['Tags'] = ''
+                    match_row['Tags'] = agg_row.get('Tags', '')  # Preserve tags from aggregator
                     match_row['reconciled_key'] = match_row['Date']
                     match_row['Matched'] = True
                     matches.append(match_row)
@@ -779,7 +779,7 @@ def reconcile_transactions(aggregator_df, detail_records):
                     unmatched_row['Date'] = unmatched_row['Transaction Date']
                     unmatched_row['YearMonth'] = unmatched_row['Date'][:7]  # YYYY-MM
                     unmatched_row['Account'] = f"Unreconciled - {source_file}"
-                    unmatched_row['Tags'] = ''
+                    unmatched_row['Tags'] = agg_row.get('Tags', '')  # Preserve tags from aggregator
                     unmatched_row['reconciled_key'] = unmatched_row['Date']
                     unmatched_row['Matched'] = False
                     unmatched.append(unmatched_row)
@@ -790,7 +790,7 @@ def reconcile_transactions(aggregator_df, detail_records):
             unmatched_row['Date'] = unmatched_row['Transaction Date']
             unmatched_row['YearMonth'] = unmatched_row['Date'][:7]  # YYYY-MM
             unmatched_row['Account'] = f"Unreconciled - {source_file}"
-            unmatched_row['Tags'] = ''
+            unmatched_row['Tags'] = ''  # Detail records don't have tags
             unmatched_row['reconciled_key'] = unmatched_row['Date']
             unmatched_row['Matched'] = False
             unmatched.append(unmatched_row)
@@ -798,13 +798,6 @@ def reconcile_transactions(aggregator_df, detail_records):
     # Convert results to DataFrames
     matches_df = pd.DataFrame(matches)
     unmatched_df = pd.DataFrame(unmatched)
-    
-    # Ensure all required columns are present
-    for col in required_columns:
-        if col not in matches_df.columns:
-            matches_df[col] = None
-        if col not in unmatched_df.columns:
-            unmatched_df[col] = None
     
     return matches_df, unmatched_df
 
@@ -1014,7 +1007,6 @@ def save_reconciliation_results(matches_df, unmatched_df, output_path):
     matches_transformed['Date'] = matches_transformed['Transaction Date']
     matches_transformed['YearMonth'] = pd.to_datetime(matches_transformed['Date']).dt.strftime('%Y-%m-%d').str[:7]
     matches_transformed['Account'] = 'Matched - ' + matches_transformed['source_file']
-    matches_transformed['Tags'] = ''
     matches_transformed['reconciled_key'] = matches_transformed['Date']
     matches_transformed['Matched'] = True
     
@@ -1023,7 +1015,6 @@ def save_reconciliation_results(matches_df, unmatched_df, output_path):
     unmatched_transformed['Date'] = unmatched_transformed['Transaction Date']
     unmatched_transformed['YearMonth'] = pd.to_datetime(unmatched_transformed['Date']).dt.strftime('%Y-%m-%d').str[:7]
     unmatched_transformed['Account'] = 'Unreconciled - ' + unmatched_transformed['source_file']
-    unmatched_transformed['Tags'] = ''
     unmatched_transformed['reconciled_key'] = unmatched_transformed['Date']
     unmatched_transformed['Matched'] = False
     
