@@ -109,28 +109,29 @@ generate_reconciliation_report(matches, unmatched, "report.txt")
 
 ## Output Format
 
-The reconciliation process generates two output files in the `output` directory:
+The reconciliation process generates a single output file in the `output` directory:
 
-### Matched Transactions (matched.csv)
+### All Transactions (all_transactions.csv)
 - **Columns**:
-  - `Transaction Date`: YYYY-MM-DD
-  - `Post Date`: YYYY-MM-DD
+  - `Date`: YYYY-MM-DD
+  - `YearMonth`: YYYY-MM
+  - `Account`: String (source of transaction)
   - `Description`: String
-  - `Amount`: Decimal (negative for debits)
   - `Category`: String
-  - `source_file`: String
-  - `match_type`: String (describes matching strategy used)
-    - `post_date_amount`: Matched on post date and amount
-    - `transaction_date_amount`: Matched on transaction date and amount
+  - `Tags`: String (preserved from aggregator file)
+  - `Amount`: Decimal (negative for debits)
+  - `reconciled_key`: String (date-based key for reconciliation)
+  - `Matched`: Boolean (True for matched transactions)
 
-### Unmatched Transactions (unmatched.csv)
-- **Columns**:
-  - `Transaction Date`: YYYY-MM-DD
-  - `Post Date`: YYYY-MM-DD
-  - `Description`: String
-  - `Amount`: Decimal (negative for debits)
-  - `Category`: String
-  - `source_file`: String
+### Tag Handling
+- Tags from the aggregator file are preserved in the output
+- Tags are maintained for both matched and unmatched transactions from the aggregator
+- Transactions from other sources have empty tags
+
+### Matching Strategy
+1. Primary matching: Post date and amount
+2. Secondary matching: Transaction date and amount
+3. Unmatched transactions are preserved with their original data
 
 ### Potential Issues
 1. **Date Handling**: 
@@ -146,12 +147,12 @@ The reconciliation process generates two output files in the `output` directory:
    - No standardization is performed, which may lead to inconsistent categorization
 
 4. **Source Tracking**:
-   - The `source_file` column helps track where transactions originated
-   - However, it may not be clear which specific account or card the transaction came from
+   - The `Account` column helps track where transactions originated
+   - Format: "Matched - {source_file}" or "Unreconciled - {source_file}"
 
 5. **Match Type Limitation**:
-   - Primary matching uses post date and amount (`post_date_amount` match type)
-   - Secondary matching uses transaction date and amount (`transaction_date_amount` match type)
+   - Primary matching uses post date and amount
+   - Secondary matching uses transaction date and amount
    - No support for description-based matching or fuzzy matching
 
 ## Development
