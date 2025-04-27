@@ -61,8 +61,8 @@ A Python package for reconciling financial transactions across multiple sources.
   - `Account #`: Integer
   - `Amount`: Decimal (positive for charges, negative for payments/credits)
 
-### Aggregator (Empower)
-- **File Pattern**: `empower_*.csv`
+### Aggregator (aggregator)
+- **File Pattern**: `aggregator_*.csv`
 - **Columns**:
   - `Date`: YYYY-MM-DD
   - `Account`: String
@@ -91,21 +91,112 @@ Note: The numbering is for human readability and organization. Test execution or
 pip install -e .
 ```
 
-## Usage
+## User Guide
 
-```python
-from src.reconcile import reconcile_transactions
+### Getting Started
 
-# Import transactions from multiple sources
-source_df = import_folder("path/to/source/files")
-target_df = import_folder("path/to/target/files")
+1. **Prepare Your Files**
+   - The default configuration expects files in these locations:
+     - Bank statements: `data/2025/details/`
+     - Aggregator exports: `data/2025/`
+   - If you want to use different locations, you can specify them with command-line arguments
+   - Download your bank statements and save them with the correct names:
+     - Discover: `discover_2025_03.csv`
+     - Capital One: `capital_one_2025_03.csv`
+     - Chase: `chase_2025_03.csv`
+     - Alliant Checking: `alliant_checking_2025_03.csv`
+     - Alliant Visa: `alliant_visa_2025_03.csv`
+     - American Express: `amex_2025_03.csv`
+   - Download your aggregator export and save it as `aggregator_2025_03.csv`
 
-# Reconcile transactions
-matches, unmatched = reconcile_transactions(source_df, target_df)
+2. **Basic Usage**
+   ```bash
+   # Run with default paths (data/2025/details and data/2025)
+   python -m src.reconcile
+   
+   # Run with custom paths
+   python -m src.reconcile --statements statements/2025/03 --aggregator aggregator/2025/03
+   
+   # Run with debug logging
+   python -m src.reconcile --debug
+   
+   # Run with specific log level
+   python -m src.reconcile --log-level warning
+   ```
 
-# Generate report
-generate_reconciliation_report(matches, unmatched, "report.txt")
-```
+3. **Understanding the Results**
+   After running the reconciliation, you'll find:
+   - `output/all_transactions.csv`: Contains all transactions with their reconciliation status
+   - `reconciliation_report.txt`: Shows a summary of the reconciliation including:
+     - Total number of transactions
+     - Number of matched transactions
+     - List of unmatched transactions with details
+     - Common issues found during reconciliation
+
+### Common Use Cases
+
+1. **Using Default Paths**
+   ```bash
+   # Just run the reconciliation with default paths
+   python -m src.reconcile
+   ```
+
+2. **Custom Paths**
+   ```bash
+   # For March 2025 with custom paths
+   python -m src.reconcile --statements statements/2025/03 --aggregator aggregator/2025/03
+   
+   # For Q1 2025 with custom paths
+   python -m src.reconcile --statements statements/2025/Q1 --aggregator aggregator/2025/Q1
+   ```
+
+### Handling Unmatched Transactions
+
+1. **Review the Report**
+   - Check `reconciliation_report.txt` for unmatched transactions
+   - Look for patterns in the unmatched transactions
+   - Common issues include:
+     - Date mismatches (transaction vs. post date)
+     - Amount rounding differences
+     - Description variations
+
+2. **Investigate Common Issues**
+   - Date format mismatches
+   - Amount sign conventions
+   - Description standardization
+   - Category mapping
+
+### Best Practices
+
+1. **File Management**
+   - Keep your source files organized by date
+   - Maintain a consistent file naming convention
+   - Archive processed files after reconciliation
+
+2. **Data Quality**
+   - Verify column headers match the expected format
+   - Check for missing or malformed data
+   - Ensure consistent date formats
+   - Validate amount signs and decimal places
+
+3. **Regular Reconciliation**
+   - Perform reconciliations monthly
+   - Keep track of recurring unmatched transactions
+   - Document any systematic issues
+
+### Troubleshooting
+
+1. **Common Errors**
+   - "Invalid file format": Check column headers and file naming
+   - "Missing required columns": Verify all required columns are present
+   - "Invalid date format": Ensure dates follow the expected format
+   - "Amount conversion error": Check for non-numeric characters in amount fields
+
+2. **Debugging Tips**
+   - Use the `--debug` flag for detailed logging
+   - Check the generated report for details
+   - Verify file contents match the expected format
+   - Look for patterns in unmatched transactions
 
 ## Output Format
 

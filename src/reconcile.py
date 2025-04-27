@@ -37,6 +37,7 @@ import re
 import csv
 from src.utils import ensure_directory, create_output_directories, setup_logging
 import argparse
+from typing import Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -67,11 +68,17 @@ def standardize_date(date_str):
         return date_str.apply(standardize_date)
         
     if pd.isna(date_str):
+        logger.debug(f"Date is NA: {date_str}")
         return None
         
     if not isinstance(date_str, str):
+        logger.debug(f"Date is not a string: {date_str} ({type(date_str)})")
         return None
         
+    # Remove quotes and extra whitespace
+    date_str = date_str.strip().strip('"\'')
+    logger.debug(f"Processing date string: {date_str}")
+    
     # Try different date formats
     formats = [
         '%Y-%m-%d',  # ISO
@@ -85,13 +92,19 @@ def standardize_date(date_str):
     
     for fmt in formats:
         try:
+            logger.debug(f"Trying format {fmt} on {date_str}")
             dt = datetime.strptime(date_str, fmt)
             if dt.year < 1900 or dt.year > 2100:
+                logger.debug(f"Date year out of range: {date_str}")
                 return None
-            return dt.strftime('%Y-%m-%d')
-        except ValueError:
+            result = dt.strftime('%Y-%m-%d')
+            logger.debug(f"Successfully converted {date_str} to {result} using format {fmt}")
+            return result
+        except ValueError as e:
+            logger.debug(f"Failed to parse {date_str} with format {fmt}: {str(e)}")
             continue
             
+    logger.debug(f"Could not parse date: {date_str}")
     return None
 
 def clean_amount(amount_str):
@@ -320,7 +333,14 @@ def process_chase_format(df):
     """Process Chase format transactions.
     
     Args:
-        df (pd.DataFrame): Raw transaction data
+        df (pd.DataFrame): Raw transaction data with columns:
+            - Details: Date in MM/DD/YYYY format
+            - Posting Date: Transaction description
+            - Description: Amount (as string with $ and commas)
+            - Amount: Transaction type (e.g., ACCT_XFER)
+            - Type: Balance
+            - Balance: Running balance
+            - Check or Slip #: Optional check number
         
     Returns:
         pd.DataFrame: Standardized transaction data
@@ -328,24 +348,30 @@ def process_chase_format(df):
     Raises:
         ValueError: If any required field is invalid or missing
     """
+    # Validate required columns
+    required_cols = ['Details', 'Posting Date', 'Description', 'Amount', 'Type']
+    if not all(col in df.columns for col in required_cols):
+        raise ValueError(f"Missing required columns. Expected: {required_cols}")
+    
+    logger.debug(f"Processing Chase format with columns: {df.columns}")
+    
     # Create result DataFrame with standardized columns
     result = pd.DataFrame()
     
     # Map date columns
-    result['Transaction Date'] = df['Posting Date'].apply(standardize_date)  # Chase only provides posting date
-    result['Post Date'] = df['Posting Date'].apply(standardize_date)
+    result['Transaction Date'] = df['Details'].apply(standardize_date)
+    result['Post Date'] = result['Transaction Date']  # Chase doesn't have separate post date
     
     # Validate dates
     if result['Transaction Date'].isna().any():
-        raise ValueError("Invalid date format")
-    if result['Post Date'].isna().any():
-        raise ValueError("Invalid date format")
+        logger.error(f"Invalid dates found: {df.loc[result['Transaction Date'].isna(), 'Details']}")
+        raise ValueError("Invalid date format in Chase file. Expected MM/DD/YYYY")
     
     # Map description
-    result['Description'] = df['Description'].apply(standardize_description)
+    result['Description'] = df['Posting Date']
     
     # Convert amount to float and ensure debits are negative
-    result['Amount'] = df['Amount'].apply(clean_amount)
+    result['Amount'] = df['Description'].apply(clean_amount)
     
     # Map category (Chase doesn't provide categories)
     result['Category'] = 'Uncategorized'
@@ -747,7 +773,7 @@ def reconcile_transactions(aggregator_df, detail_records):
                 match_row['YearMonth'] = match_row['Date'][:7]  # YYYY-MM
                 match_row['Account'] = f"Matched - {source_file}"
                 match_row['Tags'] = agg_row.get('Tags', '')  # Preserve tags from aggregator
-                match_row['reconciled_key'] = match_row['Date']
+                match_row['reconciled_key'] = f"P:{match_row['Date']}_{abs(match_row['Amount']):.2f}"
                 match_row['Matched'] = True
                 matches.append(match_row)
                 
@@ -767,7 +793,7 @@ def reconcile_transactions(aggregator_df, detail_records):
                     match_row['YearMonth'] = match_row['Date'][:7]  # YYYY-MM
                     match_row['Account'] = f"Matched - {source_file}"
                     match_row['Tags'] = agg_row.get('Tags', '')  # Preserve tags from aggregator
-                    match_row['reconciled_key'] = match_row['Date']
+                    match_row['reconciled_key'] = f"T:{match_row['Date']}_{abs(match_row['Amount']):.2f}"
                     match_row['Matched'] = True
                     matches.append(match_row)
                     
@@ -780,7 +806,7 @@ def reconcile_transactions(aggregator_df, detail_records):
                     unmatched_row['YearMonth'] = unmatched_row['Date'][:7]  # YYYY-MM
                     unmatched_row['Account'] = f"Unreconciled - {source_file}"
                     unmatched_row['Tags'] = agg_row.get('Tags', '')  # Preserve tags from aggregator
-                    unmatched_row['reconciled_key'] = unmatched_row['Date']
+                    unmatched_row['reconciled_key'] = f"U:{unmatched_row['Date']}_{abs(unmatched_row['Amount']):.2f}"
                     unmatched_row['Matched'] = False
                     unmatched.append(unmatched_row)
         
@@ -791,7 +817,7 @@ def reconcile_transactions(aggregator_df, detail_records):
             unmatched_row['YearMonth'] = unmatched_row['Date'][:7]  # YYYY-MM
             unmatched_row['Account'] = f"Unreconciled - {source_file}"
             unmatched_row['Tags'] = ''  # Detail records don't have tags
-            unmatched_row['reconciled_key'] = unmatched_row['Date']
+            unmatched_row['reconciled_key'] = f"U:{unmatched_row['Date']}_{abs(unmatched_row['Amount']):.2f}"
             unmatched_row['Matched'] = False
             unmatched.append(unmatched_row)
     
@@ -839,9 +865,39 @@ def import_csv(file_path):
     # 3. Check if it's a supported file type (case-insensitive)
     ext = file_path.suffix.lower()
     if ext == '.csv':
-        df = pd.read_csv(file_path)
+        try:
+            # Try different encodings
+            encodings = ['utf-8-sig', 'utf-8', 'cp1252']
+            df = None
+            for encoding in encodings:
+                try:
+                    # First try with pandas directly
+                    df = pd.read_csv(file_path, encoding=encoding)
+                    logger.debug(f"Successfully read CSV with pandas using encoding {encoding}")
+                    break
+                except UnicodeDecodeError:
+                    logger.debug(f"Failed to read with pandas encoding {encoding}, trying next...")
+                    continue
+                except Exception as e:
+                    logger.debug(f"Error reading with pandas encoding {encoding}: {str(e)}")
+                    continue
+            
+            if df is None:
+                raise ValueError("Could not read CSV file with any supported encoding")
+                
+            if df.empty:
+                raise ValueError("No data could be read from the CSV file")
+                
+            logger.debug(f"DataFrame shape: {df.shape}")
+            logger.debug(f"Columns in CSV: {df.columns}")
+            logger.debug(f"First few rows:\n{df.head()}")
+        except Exception as e:
+            raise ValueError(f"Error reading CSV file {file_path}: {str(e)}")
     elif ext == '.xlsx':
-        df = pd.read_excel(file_path)
+        try:
+            df = pd.read_excel(file_path)
+        except Exception as e:
+            raise ValueError(f"Error reading Excel file {file_path}: {str(e)}")
     else:
         raise ValueError(f"Unsupported file format: {file_path.suffix}. Supported formats: .csv, .CSV, .xlsx, .XLSX")
     
@@ -849,83 +905,99 @@ def import_csv(file_path):
     filename = file_path.stem  # Get filename without extension
     filename_lower = filename.lower()
     
-    if 'discover' in filename_lower:
-        result = process_discover_format(df)
-        result['source_file'] = filename
-        return result
-    elif 'capital_one' in filename_lower:
-        result = process_capital_one_format(df)
-        result['source_file'] = filename
-        return result
-    elif 'chase' in filename_lower:
-        result = process_chase_format(df)
-        result['source_file'] = filename
-        return result
-    elif 'alliant_checking' in filename_lower:
-        result = process_alliant_checking_format(df)
-        result['source_file'] = filename
-        return result
-    elif 'alliant_visa' in filename_lower:
-        result = process_alliant_visa_format(df)
-        result['source_file'] = filename
-        return result
-    elif 'amex' in filename_lower:
-        result = process_amex_format(df)
-        result['source_file'] = filename
-        return result
-    elif 'empower' in filename_lower:
-        result = process_aggregator_format(df)
-        result['source_file'] = filename
-        return result
-    
-    # 5. For unknown formats, check required columns
-    required_columns = ['Transaction Date', 'Description', 'Amount']
-    if not all(col in df.columns for col in required_columns):
-        raise ValueError(f"Missing required columns in {file_path}. Required: {required_columns}")
-    
-    df['source_file'] = filename
-    return df
+    try:
+        if 'discover' in filename_lower:
+            result = process_discover_format(df)
+            result['source_file'] = filename
+            return result
+        elif 'capital_one' in filename_lower:
+            result = process_capital_one_format(df)
+            result['source_file'] = filename
+            return result
+        elif 'chase' in filename_lower:
+            result = process_chase_format(df)
+            result['source_file'] = filename
+            return result
+        elif 'alliant_checking' in filename_lower:
+            result = process_alliant_checking_format(df)
+            result['source_file'] = filename
+            return result
+        elif 'alliant_visa' in filename_lower:
+            result = process_alliant_visa_format(df)
+            result['source_file'] = filename
+            return result
+        elif 'amex' in filename_lower:
+            result = process_amex_format(df)
+            result['source_file'] = filename
+            return result
+        elif 'empower' in filename_lower or 'aggregator' in filename_lower:
+            result = process_aggregator_format(df)
+            result['source_file'] = filename
+            return result
+        
+        # 5. For unknown formats, check required columns
+        required_columns = ['Transaction Date', 'Description', 'Amount']
+        if not all(col in df.columns for col in required_columns):
+            raise ValueError(f"Missing required columns in {file_path}. Required: {required_columns}")
+        
+        df['source_file'] = filename
+        return df
+    except Exception as e:
+        raise ValueError(f"Error processing {file_path}: {str(e)}")
 
 def import_folder(folder_path):
     """
-    Import all CSV files from a folder.
+    Import all transaction files from a folder.
     
     Args:
-        folder_path (str or Path): Path to folder containing CSV files
+        folder_path (str or Path): Path to the folder containing transaction files
         
     Returns:
-        list: List of DataFrames containing standardized transaction data
+        list: List of DataFrames containing transaction data from each file
         
     Raises:
-        FileNotFoundError: If folder does not exist
-        ValueError: If no CSV files found or if any file cannot be processed
+        ValueError: If folder does not exist or no valid files found
     """
-    logger.info(f"Importing folder: {folder_path}")
-    
     # Convert to Path object if string
     if isinstance(folder_path, str):
         folder_path = pathlib.Path(folder_path)
     
     # Check if folder exists
     if not folder_path.exists():
-        raise FileNotFoundError(f"Folder not found: {folder_path}")
+        raise ValueError(f"Folder not found: {folder_path}")
     
-    # Find all CSV files
-    csv_files = list(folder_path.glob('*.csv'))
-    if not csv_files:
-        raise ValueError(f"No CSV files found in {folder_path}")
+    # Check if path is a directory
+    if not folder_path.is_dir():
+        raise ValueError(f"Path is not a directory: {folder_path}")
+    
+    # Get list of CSV and Excel files (case-insensitive)
+    files = set()  # Use a set to avoid duplicates
+    for pattern in ['*.csv', '*.CSV', '*.xlsx', '*.XLSX']:
+        files.update(folder_path.glob(pattern))
+    
+    if not files:
+        raise ValueError(f"No CSV or Excel files found in {folder_path}")
+    
+    logger.info(f"Importing folder: {folder_path}")
     
     # Import each file
-    results = []
-    for file_path in csv_files:
+    dfs = []
+    for file_path in sorted(files):  # Sort for consistent order
         try:
             df = import_csv(file_path)
-            results.append(df)
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                dfs.append(df)
+            else:
+                logger.warning(f"Skipping empty file: {file_path}")
         except Exception as e:
             logger.error(f"Error importing {file_path}: {str(e)}")
             raise ValueError(f"Error importing {file_path}: {str(e)}")
     
-    return results
+    # Return list of DataFrames
+    if not dfs:
+        raise ValueError(f"No valid data found in {folder_path}")
+    
+    return dfs
 
 def export_reconciliation(results_df, output_path):
     """
@@ -1096,52 +1168,92 @@ def format_report_summary(matches_df, unmatched_df):
     
     return "".join(summary)
 
+def import_data(statements_path: str, aggregator_path: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Import and process data from statements and aggregator files.
+    
+    Args:
+        statements_path: Path to statements directory or file
+        aggregator_path: Path to aggregator file
+        
+    Returns:
+        Tuple of (statements_df, aggregator_df)
+        
+    Raises:
+        ValueError: If paths are invalid or data cannot be loaded
+    """
+    try:
+        # Import statements
+        if os.path.isdir(statements_path):
+            statements_dfs = import_folder(statements_path)
+            if not statements_dfs:
+                raise ValueError("No data loaded from statements")
+            statements_df = pd.concat(statements_dfs, ignore_index=True)
+        else:
+            statements_df = import_csv(statements_path)
+            
+        if statements_df.empty:
+            raise ValueError("No data loaded from statements")
+            
+        # Import aggregator
+        aggregator_df = import_csv(aggregator_path)
+        if aggregator_df.empty:
+            raise ValueError("No data loaded from aggregator")
+            
+        return statements_df, aggregator_df
+        
+    except Exception as e:
+        raise ValueError(f"Error importing data: {str(e)}")
+
 def main():
-    """Main function to run the reconciliation process."""
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Reconcile transaction data')
-    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
-    parser.add_argument('--log-level', choices=['debug', 'info', 'warning', 'error'], 
-                       default='info', help='Set logging level')
+    """
+    Main entry point for the reconciliation process.
+    """
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Reconcile transaction files')
+    parser.add_argument('--statements', default='data/2025/details',
+                      help='Directory containing statement files')
+    parser.add_argument('--aggregator', default='data/2025/aggregator.csv',
+                      help='Path to aggregator file')
+    parser.add_argument('--debug', action='store_true',
+                      help='Enable debug logging')
+    parser.add_argument('--log-level', choices=['debug', 'info', 'warning', 'error'],
+                      default='info', help='Set logging level')
+    
     args = parser.parse_args()
     
-    # Set up logging
+    # Configure logging
     log_level = getattr(logging, args.log_level.upper())
-    setup_logging(log_level)
+    logging.basicConfig(level=log_level,
+                      format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     
-    logger.info("Starting reconciliation process")
-    
-    # Create output directories
-    create_output_directories("output")
-    
-    # Import and process data
     try:
-        # Import aggregator data
-        logger.info("Importing aggregator data")
-        aggregator_df = import_csv("data/2025/empower_2025.csv")
+        logger.info("Starting reconciliation process")
+        logger.debug(f"Using statements directory: {args.statements}")
+        logger.debug(f"Using aggregator file: {args.aggregator}")
         
-        # Import and process detail data
-        logger.info("Importing and processing detail data")
-        detail_dfs = []
-        for file in os.listdir("data/2025/details"):
-            if file.endswith(".csv"):
-                logger.info(f"Processing {file}")
-                df = import_csv(os.path.join("data/2025/details", file))
-                detail_dfs.append(df)
+        # Import data
+        statements_df, aggregator_df = import_data(args.statements, args.aggregator)
         
-        # Reconcile transactions
-        logger.info("Reconciling transactions")
-        reconciled_df, unmatched_df = reconcile_transactions(aggregator_df, detail_dfs)
+        if statements_df.empty or aggregator_df.empty:
+            logger.error("No data to process")
+            return
+            
+        # Process and match transactions
+        matched, unmatched = reconcile_transactions(aggregator_df, [statements_df])
         
         # Save results
-        logger.info("Saving results")
-        save_reconciliation_results(reconciled_df, unmatched_df, "output")
+        save_reconciliation_results(matched, unmatched, "output")
+        
+        # Generate report
+        generate_reconciliation_report(matched, unmatched, "reconciliation_report.txt")
         
         logger.info("Reconciliation complete")
         
     except Exception as e:
-        logger.error(f"Error during reconciliation: {str(e)}")
+        logger.error(f"Error during reconciliation: {str(e)}", exc_info=True)
         raise
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

@@ -97,7 +97,7 @@ def sample_matched_df():
         'YearMonth': ['2025-03', '2025-03'],
         'Account': ['Matched - discover.csv', 'Matched - capital_one.csv'],
         'Tags': ['', ''],
-        'reconciled_key': ['2025-03-17', '2025-03-18'],
+        'reconciled_key': ['P:2025-03-17_40.33', 'P:2025-03-18_25.99'],
         'Matched': [True, True]
     })
 
@@ -115,7 +115,7 @@ def sample_unmatched_df():
         'YearMonth': ['2025-03', '2025-03'],
         'Account': ['Unreconciled - chase.csv', 'Unreconciled - amex.csv'],
         'Tags': ['', ''],
-        'reconciled_key': ['2025-03-19', '2025-03-20'],
+        'reconciled_key': ['U:2025-03-19_75.50', 'U:2025-03-20_150.25'],
         'Matched': [False, False]
     })
 
@@ -179,8 +179,14 @@ def test_import_folder(tmp_path):
     
     # Import and verify
     result = import_folder(tmp_path)
+    assert isinstance(result, list)
     assert len(result) == 2
+    assert all(isinstance(df, pd.DataFrame) for df in result)
     assert all(not df.empty for df in result)
+    
+    # Verify source files
+    source_files = {df['source_file'].iloc[0] for df in result}
+    assert source_files == {'test1', 'test2'}
 
 class TestReconciliation:
     """Test suite for transaction reconciliation"""
@@ -343,6 +349,49 @@ class TestReconciliation:
         assert pd.api.types.is_string_dtype(sample_matched_df['Tags'])
         assert pd.api.types.is_string_dtype(sample_matched_df['reconciled_key'])
         assert pd.api.types.is_bool_dtype(sample_matched_df['Matched'])
+
+    def test_reconciled_key_format(self):
+        """Test that reconciled keys are in the correct format"""
+        source_df = pd.DataFrame({
+            'Transaction Date': ['2025-01-01'],
+            'Post Date': ['2025-01-02'],
+            'Description': ['test transaction'],
+            'Amount': [-50.00],
+            'Category': ['shopping']
+        })
+        
+        target_df = pd.DataFrame({
+            'Transaction Date': ['2025-01-01'],
+            'Post Date': ['2025-01-02'],
+            'Description': ['test transaction'],
+            'Amount': [-50.00],
+            'Category': ['shopping']
+        })
+        
+        matches, unmatched = reconcile_transactions(source_df, [target_df])
+        
+        # Verify matched transaction key format
+        assert matches['reconciled_key'].iloc[0] == 'P:2025-01-01_50.00'
+        
+        # Verify unmatched transaction key format
+        source_df = pd.DataFrame({
+            'Transaction Date': ['2025-01-01'],
+            'Post Date': ['2025-01-02'],
+            'Description': ['test transaction'],
+            'Amount': [-50.00],
+            'Category': ['shopping']
+        })
+        
+        target_df = pd.DataFrame({
+            'Transaction Date': ['2025-01-03'],
+            'Post Date': ['2025-01-04'],
+            'Description': ['different transaction'],
+            'Amount': [-75.00],
+            'Category': ['dining']
+        })
+        
+        matches, unmatched = reconcile_transactions(source_df, [target_df])
+        assert unmatched['reconciled_key'].iloc[0] == 'U:2025-01-01_50.00'
 
 def test_calculate_discrepancies():
     """Test the calculate_discrepancies function"""
