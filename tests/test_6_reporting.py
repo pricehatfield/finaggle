@@ -90,7 +90,7 @@ def sample_matched_df():
         'YearMonth': ['2025-03', '2025-03'],
         'Account': ['Matched - discover.csv', 'Matched - capital_one.csv'],
         'Tags': ['', ''],
-        'reconciled_key': ['2025-03-17', '2025-03-18'],
+        'reconciled_key': ['P:2025-03-17_40.33', 'P:2025-03-18_25.99'],
         'Matched': [True, True]
     })
 
@@ -108,7 +108,7 @@ def sample_unmatched_df():
         'YearMonth': ['2025-03', '2025-03'],
         'Account': ['Unreconciled - chase.csv', 'Unreconciled - amex.csv'],
         'Tags': ['', ''],
-        'reconciled_key': ['2025-03-19', '2025-03-20'],
+        'reconciled_key': ['U:2025-03-19_75.50', 'U:2025-03-20_150.25'],
         'Matched': [False, False]
     })
 
@@ -172,7 +172,7 @@ class TestReporting:
             'Account': ['Matched - source.csv'],
             'YearMonth': ['2025-01'],
             'Tags': [''],
-            'reconciled_key': ['2025-01-01'],
+            'reconciled_key': ['P:2025-01-01_50.00'],
             'Matched': [True]
         })
         
@@ -187,7 +187,7 @@ class TestReporting:
             'Account': ['Unreconciled - source.csv'],
             'YearMonth': ['2025-01'],
             'Tags': [''],
-            'reconciled_key': ['2025-01-03'],
+            'reconciled_key': ['U:2025-01-03_75.00'],
             'Matched': [False]
         })
         
@@ -212,7 +212,11 @@ class TestReporting:
             'Amount': [-50.00],
             'Category': ['shopping'],
             'source_file': ['source.csv'],
-            'target_file': ['target.csv']
+            'target_file': ['target.csv'],
+            'Tags': [''],
+            'Date': ['2025-01-01'],
+            'YearMonth': ['2025-01'],
+            'Account': ['Matched - source.csv']
         })
 
         unmatched = pd.DataFrame({
@@ -221,7 +225,11 @@ class TestReporting:
             'Description': ['unmatched transaction'],
             'Amount': [-75.00],
             'Category': ['dining'],
-            'source_file': ['source.csv']
+            'source_file': ['source.csv'],
+            'Tags': [''],
+            'Date': ['2025-01-03'],
+            'YearMonth': ['2025-01'],
+            'Account': ['Unreconciled - source.csv']
         })
 
         # Save results
@@ -339,8 +347,8 @@ def test_output_format_validation(sample_transactions_df):
         "Matched should be boolean"
 
     # Test reconciled_key format
-    assert pd.to_datetime(sample_transactions_df['reconciled_key']).dt.strftime('%Y-%m-%d').equals(sample_transactions_df['reconciled_key']), \
-        "reconciled_key must be in YYYY-MM-DD format"
+    assert sample_transactions_df['reconciled_key'].str.match(r'^[PTU]:\d{4}-\d{2}-\d{2}_\d+\.\d{2}$').all(), \
+        "reconciled_key must be in format {prefix}:{date}_{amount} where prefix is P, T, or U"
 
     # Test Account format
     assert all(acc.startswith(('Matched - ', 'Unreconciled - ')) for acc in sample_transactions_df['Account']), \
@@ -418,20 +426,30 @@ def test_reconciled_output_format(tmp_path):
     # Create sample matched transactions
     matched_data = {
         'Transaction Date': ['2024-01-01', '2024-01-02'],
+        'Post Date': ['2024-01-02', '2024-01-03'],
         'Description': ['Test Transaction 1', 'Test Transaction 2'],
         'Amount': [100.00, -50.00],
         'Category': ['Income', 'Expense'],
-        'source_file': ['bank1.csv', 'bank2.csv']
+        'source_file': ['bank1.csv', 'bank2.csv'],
+        'Tags': ['', ''],
+        'Date': ['2024-01-01', '2024-01-02'],
+        'YearMonth': ['2024-01', '2024-01'],
+        'Account': ['Matched - bank1.csv', 'Matched - bank2.csv']
     }
     matched_df = pd.DataFrame(matched_data)
 
     # Create sample unmatched transactions
     unmatched_data = {
         'Transaction Date': ['2024-01-03', '2024-01-04'],
+        'Post Date': ['2024-01-04', '2024-01-05'],
         'Description': ['Test Transaction 3', 'Test Transaction 4'],
         'Amount': [75.00, -25.00],
         'Category': ['Income', 'Expense'],
-        'source_file': ['bank3.csv', 'bank4.csv']
+        'source_file': ['bank3.csv', 'bank4.csv'],
+        'Tags': ['', ''],
+        'Date': ['2024-01-03', '2024-01-04'],
+        'YearMonth': ['2024-01', '2024-01'],
+        'Account': ['Unreconciled - bank3.csv', 'Unreconciled - bank4.csv']
     }
     unmatched_df = pd.DataFrame(unmatched_data)
 

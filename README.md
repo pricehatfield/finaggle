@@ -211,7 +211,7 @@ The reconciliation process generates a single output file in the `output` direct
   - `Category`: String
   - `Tags`: String (preserved from aggregator file)
   - `Amount`: Decimal (negative for debits)
-  - `reconciled_key`: String (date-based key for reconciliation)
+  - `reconciled_key`: String (format: {prefix}:{date}_{amount} where prefix is P for post date matches, T for transaction date matches, or U for unmatched records)
   - `Matched`: Boolean (True for matched transactions)
 
 ### Tag Handling

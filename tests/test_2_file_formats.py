@@ -381,8 +381,8 @@ def test_output_format_specification(sample_transactions_df):
         "Matched should be boolean"
 
     # Test reconciled_key format
-    assert pd.to_datetime(sample_transactions_df['reconciled_key']).dt.strftime('%Y-%m-%d').equals(sample_transactions_df['reconciled_key']), \
-        "reconciled_key must be in YYYY-MM-DD format"
+    assert sample_transactions_df['reconciled_key'].str.match(r'^[PTU]:\d{4}-\d{2}-\d{2}_\d+\.\d{2}$').all(), \
+        "reconciled_key must be in format {prefix}:{date}_{amount} where prefix is P, T, or U"
 
     # Test Account format
     assert all(acc.startswith(('Matched - ', 'Unreconciled - ')) for acc in sample_transactions_df['Account']), \
