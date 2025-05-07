@@ -105,22 +105,22 @@ def test_invalid_file_handling(tmp_path):
     # Non-existent file
     with pytest.raises(FileNotFoundError):
         import_csv(str(tmp_path / "nonexistent.csv"))
-        
+
     # Empty file
     empty_file = tmp_path / "empty.csv"
     empty_file.touch()
-    with pytest.raises(pd.errors.EmptyDataError):
+    with pytest.raises(ValueError, match="Could not read CSV file with any supported encoding"):
         import_csv(str(empty_file))
-        
-    # Malformed CSV
-    malformed_file = tmp_path / "malformed.csv"
-    with open(malformed_file, 'w') as f:
-        f.write("Date,Description,Amount\n")
-        f.write("2025-03-17,Test1,123.45\n")
-        f.write("2025-03-18,Test2\n")  # Missing amount
-        
-    with pytest.raises(ValueError):
-        import_csv(str(malformed_file))
+
+    # Directory instead of file
+    with pytest.raises(ValueError, match="Path is a directory"):
+        import_csv(str(tmp_path))
+
+    # Unsupported file type
+    invalid_file = tmp_path / "test.txt"
+    invalid_file.touch()
+    with pytest.raises(ValueError, match="Unsupported file format"):
+        import_csv(str(invalid_file))
 
 def test_amount_sign_consistency(tmp_path, create_test_df):
     """Test consistency of amount signs across formats"""

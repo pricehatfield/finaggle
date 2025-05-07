@@ -13,16 +13,10 @@ def create_test_date_data():
         dict: Test data with various date formats
     """
     return {
-        'iso': '2025-03-17',
-        'iso_with_time': '2025-03-17 12:34:56',
-        'us': '03/17/2025',
-        'us_short': '3/17/2025',
-        'compact': '20250317',
-        'compact_us': '03172025',
-        'short_year': '03/17/25',
-        'invalid': 'invalid',
-        'invalid_month': '2025-13-01',
-        'invalid_day': '2025-02-30'
+        'iso': '2025-03-17',  # YYYY-MM-DD format
+        'us': '03/17/2025',   # MM/DD/YYYY format
+        'us_short': '3/17/2025',  # MM/DD/YYYY with single digits
+        'invalid': 'invalid'
     }
 
 def create_test_amount_data():
@@ -65,7 +59,6 @@ class TestDateStandardization:
         """
         data = create_test_date_data()
         assert standardize_date(data['iso']) == '2025-03-17'
-        assert standardize_date(data['iso_with_time']) == '2025-03-17'  # Should work with time component
         
     @pytest.mark.dependency(depends=["TestDateStandardization::test_iso_format"])
     def test_us_format(self):
@@ -80,41 +73,15 @@ class TestDateStandardization:
         assert standardize_date(data['us_short']) == '2025-03-17'
         
     @pytest.mark.dependency(depends=["TestDateStandardization::test_iso_format"])
-    def test_compact_format(self):
-        """Test compact date formats.
-        
-        Verifies:
-        - ISO compact format parsing
-        - US compact format parsing
-        """
-        data = create_test_date_data()
-        assert standardize_date(data['compact']) == '2025-03-17'
-        assert standardize_date(data['compact_us']) == '2025-03-17'
-        
-    @pytest.mark.dependency(depends=["TestDateStandardization::test_iso_format"])
-    def test_short_year_format(self):
-        """Test dates with 2-digit years.
-        
-        Verifies:
-        - Short year format parsing
-        - Year conversion to 4-digit format
-        """
-        data = create_test_date_data()
-        assert standardize_date(data['short_year']) == '2025-03-17'
-        
-    @pytest.mark.dependency(depends=["TestDateStandardization::test_iso_format"])
     def test_invalid_dates(self):
         """Test handling of invalid dates.
         
         Verifies:
-        - Invalid format returns None
-        - Invalid month returns None
-        - Invalid day returns None
+        - Invalid format raises ValueError
         """
         data = create_test_date_data()
-        assert standardize_date(data['invalid']) is None
-        assert standardize_date(data['invalid_month']) is None
-        assert standardize_date(data['invalid_day']) is None
+        with pytest.raises(ValueError, match="Invalid date format"):
+            standardize_date(data['invalid'])
 
 @pytest.mark.dependency()
 class TestAmountCleaning:

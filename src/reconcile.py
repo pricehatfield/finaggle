@@ -62,18 +62,19 @@ def standardize_date(date_str):
         date_str (str, pd.Series, or None): Date string to standardize
         
     Returns:
-        str or None: Standardized date in YYYY-MM-DD format, or None if invalid
+        str or None: Standardized date in YYYY-MM-DD format, or None if date is invalid
+        
+    Raises:
+        ValueError: If date is null, not a string, or invalid format
     """
     if isinstance(date_str, pd.Series):
         return date_str.apply(standardize_date)
         
     if pd.isna(date_str):
-        logger.debug(f"Date is NA: {date_str}")
-        return None
+        raise ValueError("Date cannot be null")
         
     if not isinstance(date_str, str):
-        logger.debug(f"Date is not a string: {date_str} ({type(date_str)})")
-        return None
+        raise ValueError(f"Date must be a string, got {type(date_str)}")
         
     # Remove quotes and extra whitespace
     date_str = date_str.strip().strip('"\'')
@@ -95,17 +96,15 @@ def standardize_date(date_str):
             logger.debug(f"Trying format {fmt} on {date_str}")
             dt = datetime.strptime(date_str, fmt)
             if dt.year < 1900 or dt.year > 2100:
-                logger.debug(f"Date year out of range: {date_str}")
-                return None
+                raise ValueError(f"Invalid date year: {dt.year}")
             result = dt.strftime('%Y-%m-%d')
             logger.debug(f"Successfully converted {date_str} to {result} using format {fmt}")
             return result
-        except ValueError as e:
-            logger.debug(f"Failed to parse {date_str} with format {fmt}: {str(e)}")
+        except ValueError:
             continue
             
-    logger.debug(f"Could not parse date: {date_str}")
-    return None
+    # If we get here, the date format is invalid
+    raise ValueError(f"Invalid date format: {date_str}")
 
 def clean_amount(amount_str):
     """
@@ -177,6 +176,9 @@ def standardize_description(description):
     if not description:
         raise ValueError("Description cannot be empty")
         
+    # Remove "Ending in XXXX" suffix if present
+    description = re.sub(r'\s*-\s*Ending in \d{4}$', '', description)
+    
     return description
 
 def standardize_category(category):
@@ -270,11 +272,16 @@ def process_discover_format(df):
     result['Transaction Date'] = df['Trans. Date'].apply(standardize_date)
     result['Post Date'] = df['Post Date'].apply(standardize_date)
     
+    # Validate date order
+    if (result['Post Date'] < result['Transaction Date']).any():
+        raise ValueError("Post date cannot be before transaction date")
+    
     # Standardize description
     result['Description'] = df['Description'].apply(standardize_description)
     
     # Standardize amount (negative for debits, positive for credits)
-    result['Amount'] = -df['Amount'].apply(clean_amount)  # Invert sign since Discover shows debits as positive
+    # Discover uses positive for debits, so we need to invert the sign
+    result['Amount'] = df['Amount'].apply(clean_amount).apply(lambda x: -abs(x) if x > 0 else x)
     
     # Standardize category
     result['Category'] = df['Category'].apply(standardize_category)
@@ -305,6 +312,10 @@ def process_capital_one_format(df):
     # Standardize dates
     result['Transaction Date'] = df['Transaction Date'].apply(standardize_date)
     result['Post Date'] = df['Posted Date'].apply(standardize_date)
+    
+    # Validate date order
+    if (result['Post Date'] < result['Transaction Date']).any():
+        raise ValueError("Post date cannot be before transaction date")
     
     # Standardize description
     result['Description'] = df['Description'].apply(standardize_description)
@@ -406,7 +417,7 @@ def process_aggregator_format(df):
         pd.DataFrame: Standardized transaction data
     """
     # Validate required columns
-    required_columns = ['Date', 'Account', 'Description', 'Amount', 'Category', 'Tags']
+    required_columns = ['Date', 'Description', 'Amount', 'Category']
     missing_columns = [col for col in required_columns if col not in df.columns]
     if missing_columns:
         raise ValueError(f"Missing required columns: {missing_columns}")
@@ -418,8 +429,18 @@ def process_aggregator_format(df):
     result['Transaction Date'] = df['Date'].apply(standardize_date)
     result['Post Date'] = result['Transaction Date']  # Use same date for both
     
-    # Standardize description
+    # Clean descriptions and preserve account information
     result['Description'] = df['Description'].apply(standardize_description)
+    
+    # Handle account information
+    if 'Account' in df.columns:
+        result['Account'] = df['Account']
+    else:
+        # If no Account column, try to extract from Description
+        result['Account'] = df['Description'].where(
+            df['Description'].str.contains('Ending in'),
+            df['Description']  # Fallback to full description if no account number
+        )
     
     # Standardize amount (negative for debits, positive for credits)
     result['Amount'] = df['Amount'].apply(clean_amount)
@@ -427,171 +448,13 @@ def process_aggregator_format(df):
     # Standardize category
     result['Category'] = df['Category'].apply(standardize_category)
     
-    # Preserve metadata
-    result['Tags'] = df['Tags']
-    result['Account'] = df['Account']
+    # Preserve metadata if present
+    result['Tags'] = df['Tags'] if 'Tags' in df.columns else ''
     
     # Add source file
     result['source_file'] = 'aggregator.csv'
     
     return result
-
-def process_post_date_format(df):
-    """
-    Process transactions with only post dates into standardized format.
-    
-    Args:
-        df (pd.DataFrame): DataFrame containing transactions with columns:
-            - Post Date: Date the transaction posted
-            - Description: Transaction description
-            - Amount: Transaction amount (with $ and commas)
-            - Category: Transaction category (optional)
-    
-    Returns:
-        pd.DataFrame: Standardized transaction data with columns:
-            - Transaction Date: Standardized date (YYYY-MM-DD)
-            - Post Date: Standardized date (YYYY-MM-DD)
-            - Description: Cleaned description
-            - Amount: Numeric amount (negative for debits)
-            - Category: Transaction category
-            - source_file: Set to 'post_date'
-            
-    Raises:
-        ValueError: If any required field is invalid or missing
-    """
-    # Validate required columns
-    required_cols = ['Post Date', 'Description', 'Amount']
-    if not all(col in df.columns for col in required_cols):
-        raise ValueError(f"Missing required columns. Expected: {required_cols}")
-
-    # Create result DataFrame
-    result = df.copy()
-    
-    # Map and validate dates
-    result['Post Date'] = result['Post Date'].apply(standardize_date)
-    if result['Post Date'].isna().any():
-        raise ValueError("Invalid date format")
-    
-    # Use post date for transaction date
-    result['Transaction Date'] = result['Post Date']
-    
-    # Map and validate description
-    result['Description'] = result['Description'].apply(standardize_description)
-    
-    # Convert and validate amount
-    result['Amount'] = result['Amount'].apply(clean_amount) * -1  # Convert to negative for debits
-    
-    # Map category
-    result['Category'] = result.get('Category', pd.Series('', index=result.index))
-    result['source_file'] = result.get('source_file', pd.Series('post_date', index=result.index))
-    
-    return result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
-
-def process_date_format(df):
-    """
-    Process transactions with only transaction dates into standardized format.
-    
-    Args:
-        df (pd.DataFrame): DataFrame containing transactions with columns:
-            - Transaction Date: Date of the transaction
-            - Description: Transaction description
-            - Amount: Transaction amount (with $ and commas)
-            - Category: Transaction category (optional)
-    
-    Returns:
-        pd.DataFrame: Standardized transaction data with columns:
-            - Transaction Date: Standardized date (YYYY-MM-DD)
-            - Post Date: Standardized date (YYYY-MM-DD)
-            - Description: Cleaned description
-            - Amount: Numeric amount (negative for debits)
-            - Category: Transaction category
-            - source_file: Set to 'date'
-            
-    Raises:
-        ValueError: If any required field is invalid or missing
-    """
-    # Validate required columns
-    required_cols = ['Transaction Date', 'Description', 'Amount']
-    if not all(col in df.columns for col in required_cols):
-        raise ValueError(f"Missing required columns. Expected: {required_cols}")
-
-    # Create result DataFrame
-    result = df.copy()
-    
-    # Map and validate dates
-    result['Transaction Date'] = result['Transaction Date'].apply(standardize_date)
-    if result['Transaction Date'].isna().any():
-        raise ValueError("Invalid date format")
-    
-    # Use transaction date for post date
-    result['Post Date'] = result['Transaction Date']
-    
-    # Map and validate description
-    result['Description'] = result['Description'].apply(standardize_description)
-    
-    # Convert and validate amount
-    result['Amount'] = result['Amount'].apply(clean_amount) * -1  # Convert to negative for debits
-    
-    # Map category
-    result['Category'] = result.get('Category', pd.Series('', index=result.index))
-    result['source_file'] = result.get('source_file', pd.Series('date', index=result.index))
-    
-    return result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
-
-def process_debit_credit_format(df):
-    """
-    Process transactions with separate debit and credit columns into standardized format.
-    
-    Args:
-        df (pd.DataFrame): DataFrame containing transactions with columns:
-            - Date: Transaction date
-            - Description: Transaction description
-            - Debit: Debit amount (if applicable)
-            - Credit: Credit amount (if applicable)
-            - Category: Transaction category (optional)
-    
-    Returns:
-        pd.DataFrame: Standardized transaction data with columns:
-            - Transaction Date: Standardized date (YYYY-MM-DD)
-            - Post Date: Standardized date (YYYY-MM-DD)
-            - Description: Cleaned description
-            - Amount: Numeric amount (negative for debits)
-            - Category: Transaction category
-            - source_file: Set to 'debit_credit'
-            
-    Raises:
-        ValueError: If any required field is invalid or missing
-    """
-    # Validate required columns
-    required_cols = ['Date', 'Description', 'Debit', 'Credit']
-    if not all(col in df.columns for col in required_cols):
-        raise ValueError(f"Missing required columns. Expected: {required_cols}")
-
-    # Create result DataFrame
-    result = df.copy()
-    
-    # Map and validate dates
-    result['Transaction Date'] = result['Date'].apply(standardize_date)
-    if result['Transaction Date'].isna().any():
-        raise ValueError("Invalid date format")
-    
-    # Use transaction date for post date
-    result['Post Date'] = result['Transaction Date']
-    
-    # Map and validate description
-    result['Description'] = result['Description'].apply(standardize_description)
-    
-    # Convert and validate amounts
-    result['Amount'] = result.apply(
-        lambda row: -clean_amount(row['Debit']) if pd.notna(row['Debit']) and row['Debit'] != '' else clean_amount(row['Credit']),
-        axis=1
-    )
-    
-    # Map category
-    result['Category'] = result.get('Category', pd.Series('', index=result.index))
-    result['source_file'] = result.get('source_file', pd.Series('debit_credit', index=result.index))
-    
-    return result[['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']]
 
 def process_alliant_checking_format(df, source_file=None):
     """Process Alliant checking format.
@@ -660,6 +523,10 @@ def process_alliant_visa_format(df, source_file=None):
     result['Transaction Date'] = df['Date'].apply(standardize_date)
     result['Post Date'] = df['Post Date'].apply(standardize_date)
     
+    # Validate date order
+    if (result['Post Date'] < result['Transaction Date']).any():
+        raise ValueError("Post date cannot be before transaction date")
+    
     # Standardize description
     result['Description'] = df['Description'].apply(standardize_description)
     
@@ -674,97 +541,115 @@ def process_alliant_visa_format(df, source_file=None):
     
     return result
 
-def reconcile_transactions(aggregator_df, detail_records):
-    """Reconcile transactions between aggregator and detail records.
+def reconcile_transactions(source_df, target_dfs):
+    """Reconcile transactions between source and target DataFrames.
     
     Args:
-        aggregator_df (pd.DataFrame): Aggregator transactions
-        detail_records (list): List of detail record DataFrames
+        source_df (pd.DataFrame): Source transactions
+        target_dfs (list): List of target transaction DataFrames
         
     Returns:
-        tuple: (matches_df, unmatched_df) containing matched and unmatched transactions
+        tuple: (matched_df, unmatched_df)
     """
     # Initialize results
-    matches = []
+    matched = []
     unmatched = []
     
-    # Process each detail record
-    for detail_df in detail_records:
-        # Get source file name
-        source_file = detail_df['source_file'].iloc[0] if 'source_file' in detail_df.columns else 'unknown'
+    # Track matched target transactions
+    matched_target_keys = {}  # key -> count of matches
+    matched_source_keys = {}  # key -> count of matches
+    
+    # Process each source transaction
+    for _, source_row in source_df.iterrows():
+        # Create reconciled key using transaction date
+        source_key = f"P:{source_row['Transaction Date']}_{abs(source_row['Amount']):.2f}"
         
-        # Match on post date and amount
-        for _, agg_row in aggregator_df.iterrows():
-            # Find matching detail record
-            match = detail_df[
-                (detail_df['Post Date'] == agg_row['Post Date']) &
-                (detail_df['Amount'] == agg_row['Amount'])
-            ]
-            
-            if not match.empty:
-                # Add match to results
-                match_row = match.iloc[0].copy()
-                # Use Post Date for P: keys
-                match_row['Date'] = match_row['Post Date']
-                match_row['YearMonth'] = match_row['Date'][:7]  # YYYY-MM
-                match_row['Account'] = f"Matched - {source_file}"
-                match_row['Tags'] = agg_row.get('Tags', '')  # Preserve tags from aggregator
-                match_row['reconciled_key'] = f"P:{match_row['Date']}_{abs(match_row['Amount']):.2f}"
-                match_row['Matched'] = True
-                matches.append(match_row)
+        # Check for matches in each target DataFrame
+        matched_in_target = False
+        for target_df in target_dfs:
+            for _, target_row in target_df.iterrows():
+                # Create target key using transaction date
+                target_key = f"P:{target_row['Transaction Date']}_{abs(target_row['Amount']):.2f}"
                 
-                # Remove matched record from detail_df
-                detail_df = detail_df.drop(match.index)
-            else:
-                # Try matching on transaction date and amount
-                match = detail_df[
-                    (detail_df['Transaction Date'] == agg_row['Transaction Date']) &
-                    (detail_df['Amount'] == agg_row['Amount'])
-                ]
-                
-                if not match.empty:
-                    # Add match to results
-                    match_row = match.iloc[0].copy()
-                    # Use Transaction Date for T: keys
-                    match_row['Date'] = match_row['Transaction Date']
-                    match_row['YearMonth'] = match_row['Date'][:7]  # YYYY-MM
-                    match_row['Account'] = f"Matched - {source_file}"
-                    match_row['Tags'] = agg_row.get('Tags', '')  # Preserve tags from aggregator
-                    match_row['reconciled_key'] = f"T:{match_row['Date']}_{abs(match_row['Amount']):.2f}"
-                    match_row['Matched'] = True
-                    matches.append(match_row)
+                if source_key == target_key:
+                    # Count matches for both source and target
+                    source_matches = matched_source_keys.get(source_key, 0)
+                    target_matches = matched_target_keys.get(target_key, 0)
                     
-                    # Remove matched record from detail_df
-                    detail_df = detail_df.drop(match.index)
-                else:
-                    # Add unmatched aggregator record
-                    unmatched_row = agg_row.copy()
-                    # Use Transaction Date for U: keys
-                    unmatched_row['Date'] = unmatched_row['Transaction Date']
-                    unmatched_row['YearMonth'] = unmatched_row['Date'][:7]  # YYYY-MM
-                    unmatched_row['Account'] = f"Unreconciled - {source_file}"
-                    unmatched_row['Tags'] = agg_row.get('Tags', '')  # Preserve tags from aggregator
-                    unmatched_row['reconciled_key'] = f"U:{unmatched_row['Date']}_{abs(unmatched_row['Amount']):.2f}"
-                    unmatched_row['Matched'] = False
-                    unmatched.append(unmatched_row)
+                    # Only match if we haven't exceeded the count on either side
+                    source_count = len(source_df[
+                        (source_df['Transaction Date'] == source_row['Transaction Date']) &
+                        (source_df['Amount'] == source_row['Amount'])
+                    ])
+                    target_count = len(target_df[
+                        (target_df['Transaction Date'] == target_row['Transaction Date']) &
+                        (target_df['Amount'] == target_row['Amount'])
+                    ])
+                    
+                    if source_matches < source_count and target_matches < target_count:
+                        # Add to matched results
+                        matched.append({
+                            'Transaction Date': source_row['Transaction Date'],
+                            'Post Date': source_row['Post Date'],
+                            'Description': source_row['Description'],
+                            'Amount': source_row['Amount'],
+                            'Category': source_row['Category'],
+                            'Tags': source_row.get('Tags', ''),
+                            'reconciled_key': source_key,
+                            'Matched': True,
+                            'source_file': source_row.get('source_file', '')
+                        })
+                        matched_in_target = True
+                        matched_target_keys[target_key] = target_matches + 1
+                        matched_source_keys[source_key] = source_matches + 1
+                        break
+            
+            if matched_in_target:
+                break
         
-        # Add remaining detail records to unmatched
-        for _, row in detail_df.iterrows():
-            unmatched_row = row.copy()
-            # Use Transaction Date for U: keys
-            unmatched_row['Date'] = unmatched_row['Transaction Date']
-            unmatched_row['YearMonth'] = unmatched_row['Date'][:7]  # YYYY-MM
-            unmatched_row['Account'] = f"Unreconciled - {source_file}"
-            unmatched_row['Tags'] = ''  # Detail records don't have tags
-            unmatched_row['reconciled_key'] = f"U:{unmatched_row['Date']}_{abs(unmatched_row['Amount']):.2f}"
-            unmatched_row['Matched'] = False
-            unmatched.append(unmatched_row)
+        if not matched_in_target:
+            # Add to unmatched results
+            unmatched.append({
+                'Transaction Date': source_row['Transaction Date'],
+                'Post Date': source_row['Post Date'],
+                'Description': source_row['Description'],
+                'Amount': source_row['Amount'],
+                'Category': source_row['Category'],
+                'Tags': source_row.get('Tags', ''),
+                'reconciled_key': f"U:{source_row['Transaction Date']}_{abs(source_row['Amount']):.2f}",
+                'Matched': False,
+                'source_file': source_row.get('source_file', '')
+            })
+    
+    # Add unmatched target transactions
+    for target_df in target_dfs:
+        for _, target_row in target_df.iterrows():
+            target_key = f"P:{target_row['Transaction Date']}_{abs(target_row['Amount']):.2f}"
+            target_matches = matched_target_keys.get(target_key, 0)
+            target_count = len(target_df[
+                (target_df['Transaction Date'] == target_row['Transaction Date']) &
+                (target_df['Amount'] == target_row['Amount'])
+            ])
+            
+            if target_matches < target_count:
+                unmatched.append({
+                    'Transaction Date': target_row['Transaction Date'],
+                    'Post Date': target_row['Post Date'],
+                    'Description': target_row['Description'],
+                    'Amount': target_row['Amount'],
+                    'Category': target_row['Category'],
+                    'Tags': target_row.get('Tags', ''),
+                    'reconciled_key': f"U:{target_row['Transaction Date']}_{abs(target_row['Amount']):.2f}",
+                    'Matched': False,
+                    'source_file': target_row.get('source_file', '')
+                })
+                matched_target_keys[target_key] = target_matches + 1
     
     # Convert results to DataFrames
-    matches_df = pd.DataFrame(matches)
+    matched_df = pd.DataFrame(matched)
     unmatched_df = pd.DataFrame(unmatched)
     
-    return matches_df, unmatched_df
+    return matched_df, unmatched_df
 
 def import_csv(file_path):
     """
@@ -938,25 +823,6 @@ def import_folder(folder_path):
     
     return dfs
 
-def export_reconciliation(results_df, output_path):
-    """
-    Export reconciliation results to a CSV file.
-    
-    Args:
-        results_df (pd.DataFrame): DataFrame containing reconciliation results
-        output_path (str): Path to save the output file
-    
-    Returns:
-        None
-    """
-    logger.info(f"Exporting reconciliation results to {output_path}")
-    
-    try:
-        results_df.to_csv(output_path, index=False)
-    except Exception as e:
-        logger.error(f"Error exporting results to {output_path}: {e}")
-        raise
-
 def generate_reconciliation_report(matches_df, unmatched_df, report_path):
     """
     Generate a reconciliation report and save it to a text file.
@@ -1004,71 +870,91 @@ def generate_reconciliation_report(matches_df, unmatched_df, report_path):
     with open(report_path, 'w') as f:
         f.writelines(report_content)
 
-def save_reconciliation_results(matches_df, unmatched_df, output_path):
+def save_reconciliation_results(matched_df, unmatched_df, output_path):
+    """Save reconciliation results to CSV or Excel file.
+    
+    Args:
+        matched_df (pd.DataFrame): DataFrame containing matched transactions
+        unmatched_df (pd.DataFrame): DataFrame containing unmatched transactions
+        output_path (str or Path): Path to output file (CSV or Excel)
     """
-    Save reconciliation results to CSV or Excel files.
-    """
-    # Transform matched transactions
-    matches_transformed = matches_df.copy()
-    # Set Date for each row based on match type
-    def get_match_type_and_date(row):
-        # If the key starts with P, use P and Post Date; else use T and Transaction Date
-        if row['reconciled_key'].startswith('P:'):
-            return 'P', row['Post Date']
-        else:
-            return 'T', row['Transaction Date']
-    matches_transformed[['match_type', 'Date']] = matches_transformed.apply(
-        lambda row: pd.Series(get_match_type_and_date(row)), axis=1
-    )
-    matches_transformed['YearMonth'] = matches_transformed['Date'].str[:7]
-    matches_transformed['Account'] = 'Matched - ' + matches_transformed['source_file']
-    matches_transformed['reconciled_key'] = matches_transformed.apply(
-        lambda row: f"{row['match_type']}:{row['Date']}_{abs(row['Amount']):.2f}", axis=1
-    )
-    matches_transformed['Matched'] = True
-
-    # Transform unmatched transactions
-    unmatched_transformed = unmatched_df.copy()
-    unmatched_transformed['Date'] = unmatched_transformed['Transaction Date']
-    unmatched_transformed['YearMonth'] = unmatched_transformed['Date'].str[:7]
-    unmatched_transformed['Account'] = 'Unreconciled - ' + unmatched_transformed['source_file']
-    unmatched_transformed['reconciled_key'] = unmatched_transformed.apply(
-        lambda row: f"U:{row['Date']}_{abs(row['Amount']):.2f}", axis=1
-    )
-    unmatched_transformed['Matched'] = False
-
-    # Select and order columns
-    columns = [
-        'Date', 'YearMonth', 'Account', 'Description', 'Category',
-        'Tags', 'Amount', 'reconciled_key', 'Matched'
+    # Create a copy to avoid modifying the originals
+    matched_result = matched_df.copy() if not matched_df.empty else pd.DataFrame()
+    unmatched_result = unmatched_df.copy() if not unmatched_df.empty else pd.DataFrame()
+    
+    # Process matched transactions
+    if not matched_result.empty:
+        # Add YearMonth column if not present
+        if 'YearMonth' not in matched_result.columns:
+            matched_result['YearMonth'] = pd.to_datetime(matched_result['Transaction Date']).dt.strftime('%Y-%m')
+        
+        # Add reconciled_key if not present
+        if 'reconciled_key' not in matched_result.columns:
+            matched_result['reconciled_key'] = matched_result.apply(
+                lambda row: f"P:{row['Transaction Date']}_{abs(row['Amount']):.2f}",
+                axis=1
+            )
+        
+        # Add Matched column if not present
+        if 'Matched' not in matched_result.columns:
+            matched_result['Matched'] = True
+        
+        # Rename Transaction Date to Date if needed
+        if 'Transaction Date' in matched_result.columns and 'Date' not in matched_result.columns:
+            matched_result = matched_result.rename(columns={'Transaction Date': 'Date'})
+    
+    # Process unmatched transactions
+    if not unmatched_result.empty:
+        # Add YearMonth column if not present
+        if 'YearMonth' not in unmatched_result.columns:
+            unmatched_result['YearMonth'] = pd.to_datetime(unmatched_result['Transaction Date']).dt.strftime('%Y-%m')
+        
+        # Add reconciled_key if not present
+        if 'reconciled_key' not in unmatched_result.columns:
+            unmatched_result['reconciled_key'] = unmatched_result.apply(
+                lambda row: f"U:{row['Transaction Date']}_{abs(row['Amount']):.2f}",
+                axis=1
+            )
+        
+        # Add Matched column if not present
+        if 'Matched' not in unmatched_result.columns:
+            unmatched_result['Matched'] = False
+        
+        # Rename Transaction Date to Date if needed
+        if 'Transaction Date' in unmatched_result.columns and 'Date' not in unmatched_result.columns:
+            unmatched_result = unmatched_result.rename(columns={'Transaction Date': 'Date'})
+    
+    # Combine results
+    result = pd.concat([matched_result, unmatched_result], ignore_index=True)
+    
+    # Ensure all required columns are present
+    required_columns = [
+        'Date', 'YearMonth', 'Account', 'Description',
+        'Category', 'Tags', 'Amount', 'reconciled_key', 'Matched'
     ]
-
-    # Fill NaN values with empty strings for string columns
-    string_columns = ['Tags', 'Category', 'Description']
-    matches_transformed[string_columns] = matches_transformed[string_columns].fillna('')
-    unmatched_transformed[string_columns] = unmatched_transformed[string_columns].fillna('')
-
-    # Combine matched and unmatched transactions
-    all_transactions = pd.concat([
-        matches_transformed[columns],
-        unmatched_transformed[columns]
-    ], ignore_index=True)
-
-    # Sort by date and amount
-    all_transactions = all_transactions.sort_values(['Date', 'Amount'])
-
-    # Save to a single CSV file
-    output_path = str(output_path)
-    if output_path.endswith('.xlsx'):
-        # Save as Excel with a single sheet
-        with pd.ExcelWriter(output_path) as writer:
-            all_transactions.to_excel(writer, sheet_name='All Transactions', index=False)
+    for col in required_columns:
+        if col not in result.columns:
+            result[col] = ''
+    
+    # Reorder columns
+    result = result[required_columns]
+    
+    # Convert to Path object if string
+    output_path = pathlib.Path(output_path)
+    
+    # If output_path is a directory, create all_transactions.csv in that directory
+    if output_path.is_dir() or not output_path.suffix:
+        output_path = output_path / "all_transactions.csv"
+    
+    # Create output directory if it doesn't exist
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Save to file based on extension
+    if output_path.suffix.lower() == '.xlsx':
+        with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+            result.to_excel(writer, sheet_name='All Transactions', index=False)
     else:
-        # Save as CSV file
-        os.makedirs(output_path, exist_ok=True)
-        all_transactions_path = os.path.join(output_path, "all_transactions.csv")
-        all_transactions.to_csv(all_transactions_path, index=False)
-        logger.info(f"Saved all transactions to {all_transactions_path}")
+        result.to_csv(output_path, index=False)
 
 def format_report_summary(matches_df, unmatched_df):
     """
@@ -1191,10 +1077,10 @@ def main():
         matched, unmatched = reconcile_transactions(aggregator_df, [statements_df])
         
         # Save results
-        save_reconciliation_results(matched, unmatched, "output")
+        save_reconciliation_results(matched, unmatched, "output/reconciliation_results.csv")
         
         # Generate report
-        generate_reconciliation_report(matched, unmatched, "reconciliation_report.txt")
+        generate_reconciliation_report(matched, unmatched, "output/reconciliation_report.txt")
         
         logger.info("Reconciliation complete")
         

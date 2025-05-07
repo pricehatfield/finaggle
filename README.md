@@ -2,207 +2,128 @@
 
 A Python package for reconciling financial transactions across multiple sources.
 
-## Supported File Formats
+## Data Formats
 
-### Discover
-- **File Pattern**: `discover_*.csv`
+### Source Detail Formats
+
+#### Discover Format
 - **Columns**:
-  - `Trans. Date`: MM/DD/YYYY
-  - `Post Date`: MM/DD/YYYY
-  - `Description`: String
-  - `Amount`: Decimal (positive for credits, negative for debits)
-  - `Category`: String
+  - `Trans. Date`: String (MM/DD/YYYY, Python datetime format "%m/%d/%Y")
+  - `Post Date`: String (MM/DD/YYYY, Python datetime format "%m/%d/%Y")
+  - `Description`: String (may contain special characters)
+  - `Amount`: String (requires cleaning: remove $, commas, convert to Decimal)
+  - `Category`: String (may contain special characters)
+- **Notes**:
+  - Both transaction and post dates are provided
+  - Amount sign convention: negative for debits, positive for credits
+  - Amounts may include $ symbol and commas (e.g., "$1,234.56")
+  - Requires explicit decimal conversion
 
-### Capital One
-- **File Pattern**: `capital_one_*.csv`
+#### Capital One Format
 - **Columns**:
-  - `Transaction Date`: YYYY-MM-DD
-  - `Posted Date`: YYYY-MM-DD
-  - `Card No.`: String
-  - `Description`: String
-  - `Category`: String
-  - `Debit`: Decimal (positive)
-  - `Credit`: Decimal (positive)
+  - `Transaction Date`: String (YYYY-MM-DD, Python datetime format "%Y-%m-%d")
+  - `Posted Date`: String (YYYY-MM-DD, Python datetime format "%Y-%m-%d")
+  - `Card No.`: String (may contain spaces or special characters)
+  - `Description`: String (may contain special characters)
+  - `Category`: String (may contain special characters)
+  - `Debit`: String (requires cleaning: remove $, commas, convert to Decimal, null for credits)
+  - `Credit`: String (requires cleaning: remove $, commas, convert to Decimal, null for debits)
+- **Notes**:
+  - Uses separate columns for debits and credits
+  - For each transaction, exactly one of Debit or Credit will be populated
+  - The other column will be null/empty
+  - Both transaction and post dates are provided
+  - Amounts may include $ symbol and commas
+  - Null/empty values must be preserved as null (not converted to Decimal(0))
 
-### Chase
-- **File Pattern**: `chase_*.csv`
+#### Chase Format
 - **Columns**:
-  - `Details`: String
-  - `Posting Date`: MM/DD/YYYY
-  - `Description`: String
-  - `Amount`: Decimal (positive for credits, negative for debits)
-  - `Type`: String
-  - `Balance`: Decimal
-  - `Check or Slip #`: String
+  - `Details`: String (strictly "DEBIT" or "CREDIT")
+  - `Posting Date`: String (MM/DD/YYYY, Python datetime format "%m/%d/%Y", represents post date)
+  - `Description`: String (may contain special characters and newlines)
+  - `Amount`: String (requires cleaning: remove $, commas, convert to Decimal)
+  - `Type`: String (preserve as-is)
+  - `Balance`: String (requires cleaning: remove $, commas, convert to Decimal)
+  - `Check or Slip #`: String (often empty, may contain special characters)
+- **Notes**:
+  - Uses transaction type in `Details` column
+  - `Type` provides more specific transaction classification
+  - Only posting date is provided
+  - Amounts may include $ symbol and commas
+  - Descriptions may contain newlines and special characters
 
-### Alliant Checking
-- **File Pattern**: `alliant_checking_*.csv`
+#### Alliant Checking Format
 - **Columns**:
-  - `Date`: MM/DD/YYYY
-  - `Description`: String
-  - `Amount`: String (with $ symbol, positive for credits, negative for debits)
-  - `Balance`: Decimal
+  - `Date`: String (MM/DD/YYYY, Python datetime format "%m/%d/%Y", represents transaction date)
+  - `Description`: String (may contain newlines and special characters)
+  - `Amount`: String (requires cleaning: remove $, commas, convert to Decimal)
+  - `Balance`: String (requires cleaning: remove $, commas, convert to Decimal)
+- **Notes**:
+  - Only transaction date is provided
+  - Amount sign convention: negative for debits, positive for credits
+  - Amounts include $ symbol and may include commas
+  - Descriptions may contain newlines (e.g., dividend descriptions)
 
-### Alliant Visa
-- **File Pattern**: `alliant_visa_*.csv`
+#### Alliant Visa Format
 - **Columns**:
-  - `Date`: MM/DD/YYYY
-  - `Description`: String
-  - `Amount`: String (with $ symbol, positive for credits, negative for debits)
-  - `Balance`: Decimal
-  - `Post Date`: MM/DD/YYYY
+  - `Date`: String (MM/DD/YYYY, Python datetime format "%m/%d/%Y")
+  - `Description`: String (may contain special characters)
+  - `Amount`: String (requires cleaning: remove $, commas, convert to Decimal)
+  - `Balance`: String (requires cleaning: remove $, commas, convert to Decimal)
+  - `Post Date`: String (MM/DD/YYYY, Python datetime format "%m/%d/%Y")
+- **Notes**:
+  - Both transaction and post dates are provided
+  - Amount sign convention: negative for debits, positive for credits
+  - Amounts include $ symbol and may include commas
+  - Requires explicit decimal conversion with proper rounding
 
-### American Express
-- **File Pattern**: `amex_*.csv`
+#### American Express Format
 - **Columns**:
-  - `Date`: MM/DD/YYYY
-  - `Description`: String
-  - `Card Member`: String
-  - `Account #`: Integer
-  - `Amount`: Decimal (positive for charges, negative for payments/credits)
+  - `Date`: String (MM/DD/YYYY, Python datetime format "%m/%d/%Y", represents transaction date)
+  - `Description`: String (may contain special characters)
+  - `Card Member`: String (may contain spaces and special characters)
+  - `Account #`: String (preserve as-is)
+  - `Amount`: String (requires cleaning: remove $, commas, convert to Decimal)
+- **Notes**:
+  - Only transaction date is provided
+  - Amount sign convention: positive for charges, negative for credits
+  - Amounts may include $ symbol and commas
 
-### Aggregator (aggregator)
-- **File Pattern**: `aggregator_*.csv`
+### Standardized Detail Format
+All source detail records are converted to this intermediate format before matching:
+- `Transaction Date`: YYYY-MM-DD
+- `Post Date`: YYYY-MM-DD (null if not provided)
+- `Description`: String (preserved unchanged)
+- `Amount`: Decimal (negative for debits, positive for credits)
+- `Category`: String (preserved from source)
+- `source_file`: String (identifies the source of the transaction)
+- `reconciled_key`: String (see Reconciliation Key Format section)
+
+Notes:
+- Account information is preserved from the aggregator format but not from detail formats
+- Post dates are required for matching but may be null for formats that don't provide them
+- Amount sign convention is standardized to negative for debits
+- Category and Description are preserved as-is from source files
+
+### Aggregator Format
 - **Columns**:
-  - `Date`: YYYY-MM-DD
-  - `Account`: String
-  - `Description`: String
-  - `Category`: String
-  - `Tags`: String
-  - `Amount`: Decimal (negative for debits, positive for credits)
+  - `Date`: String (YYYY-MM-DD, Python datetime format "%Y-%m-%d")
+  - `Account`: String (contains account name and number)
+  - `Description`: String (may contain special characters)
+  - `Category`: String (may contain special characters)
+  - `Tags`: String (optional, comma-separated values, may contain spaces)
+  - `Amount`: String (requires cleaning: remove $, commas, convert to Decimal)
+  - `reconciled_key`: String (see Reconciliation Key Format section)
+  - `Matched`: String (strictly "True" or "False", preserved as text for human readability)
+- **Notes**:
+  - Tags can contain multiple values (e.g., "Joint,Price")
+  - Amounts may include $ symbol and commas
+  - Matched field is preserved as text for human readability
 
-## Test Structure
-
-The test suite is organized into seven sequentially numbered files that follow a progressive testing path:
-
-1. `conftest.py`: Base fixtures and configuration
-2. `test_1_utils.py`: Utility functions (date standardization, amount cleaning)
-3. `test_2_file_formats.py`: File format validation and processing
-4. `test_3_file_loads.py`: File and folder import functionality
-5. `test_4_format_standardization.py`: Data standardization (descriptions, categories)
-6. `test_5_reconciliation.py`: Transaction matching and reconciliation
-7. `test_6_reporting.py`: Report generation and output
-
-Note: The numbering is for human readability and organization. Test execution order is enforced using pytest dependency markers.
-
-## Installation
-
-```bash
-pip install -e .
-```
-
-## User Guide
-
-### Getting Started
-
-1. **Prepare Your Files**
-   - The default configuration expects files in these locations:
-     - Bank statements: `data/2025/details/`
-     - Aggregator exports: `data/2025/`
-   - If you want to use different locations, you can specify them with command-line arguments
-   - Download your bank statements and save them with the correct names:
-     - Discover: `discover_2025_03.csv`
-     - Capital One: `capital_one_2025_03.csv`
-     - Chase: `chase_2025_03.csv`
-     - Alliant Checking: `alliant_checking_2025_03.csv`
-     - Alliant Visa: `alliant_visa_2025_03.csv`
-     - American Express: `amex_2025_03.csv`
-   - Download your aggregator export and save it as `aggregator_2025_03.csv`
-
-2. **Basic Usage**
-   ```bash
-   # Run with default paths (data/2025/details and data/2025)
-   python -m src.reconcile
-   
-   # Run with custom paths
-   python -m src.reconcile --statements statements/2025/03 --aggregator aggregator/2025/03
-   
-   # Run with debug logging
-   python -m src.reconcile --debug
-   
-   # Run with specific log level
-   python -m src.reconcile --log-level warning
-   ```
-
-3. **Understanding the Results**
-   After running the reconciliation, you'll find:
-   - `output/all_transactions.csv`: Contains all transactions with their reconciliation status
-   - `reconciliation_report.txt`: Shows a summary of the reconciliation including:
-     - Total number of transactions
-     - Number of matched transactions
-     - List of unmatched transactions with details
-     - Common issues found during reconciliation
-
-### Common Use Cases
-
-1. **Using Default Paths**
-   ```bash
-   # Just run the reconciliation with default paths
-   python -m src.reconcile
-   ```
-
-2. **Custom Paths**
-   ```bash
-   # For March 2025 with custom paths
-   python -m src.reconcile --statements statements/2025/03 --aggregator aggregator/2025/03
-   
-   # For Q1 2025 with custom paths
-   python -m src.reconcile --statements statements/2025/Q1 --aggregator aggregator/2025/Q1
-   ```
-
-### Handling Unmatched Transactions
-
-1. **Review the Report**
-   - Check `reconciliation_report.txt` for unmatched transactions
-   - Look for patterns in the unmatched transactions
-   - Common issues include:
-     - Date mismatches (transaction vs. post date)
-     - Amount rounding differences
-     - Description variations
-
-2. **Investigate Common Issues**
-   - Date format mismatches
-   - Amount sign conventions
-   - Description standardization
-   - Category mapping
-
-### Best Practices
-
-1. **File Management**
-   - Keep your source files organized by date
-   - Maintain a consistent file naming convention
-   - Archive processed files after reconciliation
-
-2. **Data Quality**
-   - Verify column headers match the expected format
-   - Check for missing or malformed data
-   - Ensure consistent date formats
-   - Validate amount signs and decimal places
-
-3. **Regular Reconciliation**
-   - Perform reconciliations monthly
-   - Keep track of recurring unmatched transactions
-   - Document any systematic issues
-
-### Troubleshooting
-
-1. **Common Errors**
-   - "Invalid file format": Check column headers and file naming
-   - "Missing required columns": Verify all required columns are present
-   - "Invalid date format": Ensure dates follow the expected format
-   - "Amount conversion error": Check for non-numeric characters in amount fields
-
-2. **Debugging Tips**
-   - Use the `--debug` flag for detailed logging
-   - Check the generated report for details
-   - Verify file contents match the expected format
-   - Look for patterns in unmatched transactions
-
-## Output Format
-
+### Output Format
 The reconciliation process generates a single output file in the `output` directory:
 
-### All Transactions (all_transactions.csv)
+#### All Transactions (all_transactions.csv)
 - **Columns**:
   - `Date`: YYYY-MM-DD
   - `YearMonth`: YYYY-MM
@@ -211,51 +132,127 @@ The reconciliation process generates a single output file in the `output` direct
   - `Category`: String
   - `Tags`: String (preserved from aggregator file)
   - `Amount`: Decimal (negative for debits)
-  - `reconciled_key`: String (format: {prefix}:{date}_{amount} where prefix is P for post date matches, T for transaction date matches, or U for unmatched records)
+  - `reconciled_key`: String (see Reconciliation Key Format section)
   - `Matched`: Boolean (True for matched transactions)
 
-### Tag Handling
+#### Tag Handling
 - Tags from the aggregator file are preserved in the output
 - Tags are maintained for both matched and unmatched transactions from the aggregator
 - Transactions from other sources have empty tags
 
-### Matching Strategy
-1. Primary matching: Post date and amount
-2. Secondary matching: Transaction date and amount
-3. Unmatched transactions are preserved with their original data
+## Reconciliation Key Format
 
-### Potential Issues
-1. **Date Handling**: 
-   - The current format uses YYYY-MM-DD for all dates, which may differ from the input formats
-   - Post dates are required for matching, which may cause issues with formats that don't provide them
+The system uses a standardized reconciliation key format to uniquely identify and match transactions:
 
-2. **Amount Sign Convention**:
-   - All amounts are stored as negative for debits, which may differ from some input formats
-   - This convention is enforced during processing but may need adjustment for certain use cases
+```
+{prefix}:{date}_{amount}
+```
 
-3. **Category Standardization**:
-   - Categories are preserved from the source files
-   - No standardization is performed, which may lead to inconsistent categorization
+Where:
+- `prefix`: Indicates the match type and date source
+  - `P:`: Post Date match (from aggregator)
+  - `T:`: Transaction Date match (from detail records)
+  - `U:`: Unmatched record
+- `date`: The date used for matching (YYYY-MM-DD format)
+  - For `P:` keys: Uses the Post Date
+  - For `T:` keys: Uses the Transaction Date
+  - For `U:` keys: Uses the Transaction Date
+- `amount`: The absolute value of the transaction amount (formatted to 2 decimal places)
 
-4. **Source Tracking**:
-   - The `Account` column helps track where transactions originated
-   - Format: "Matched - {source_file}" or "Unreconciled - {source_file}"
+### Key Generation Logic
 
-5. **Match Type Limitation**:
-   - Primary matching uses post date and amount
-   - Secondary matching uses transaction date and amount
-   - No support for description-based matching or fuzzy matching
+1. **For Detail Records with Both Dates**:
+   - First attempt: Generate key using Post Date (`P:{post_date}_{amount}`)
+   - If no match found: Generate key using Transaction Date (`T:{trans_date}_{amount}`)
+   - If still no match: Mark as unmatched (`U:{trans_date}_{amount}`)
+
+2. **For Detail Records with Single Date**:
+   - Generate key using the available date with appropriate prefix based on date type:
+     - `P:` for post dates
+     - `T:` for transaction dates
+   - If no match found: Mark as unmatched (`U:{date}_{amount}`)
+
+3. **For Aggregator Records**:
+   - Generate key using Post Date (`P:{date}_{amount}`)
+   - If no match found: Mark as unmatched (`U:{date}_{amount}`)
+
+### Matching Priority
+
+1. Primary matching: Post Date and amount
+   - Uses `P:` prefix
+   - Attempts to match using the transaction's post date
+   - Most reliable match as post dates are more consistent
+
+2. Secondary matching: Transaction Date and amount
+   - Uses `T:` prefix
+   - Attempts to match using the transaction date
+   - Used when post date matching fails
+   - Less reliable due to potential date variations
+
+3. Unmatched records
+   - Uses `U:` prefix
+   - Preserves original transaction date
+   - Used for manual review and reconciliation
+
+Example keys:
+- `P:2024-03-15_123.45`: A transaction matched using Post Date
+- `T:2024-03-14_123.45`: A transaction matched using Transaction Date
+- `U:2024-03-15_123.45`: An unmatched transaction
+
+## Installation
+
+```bash
+pip install -e .
+```
+
+## Usage
+
+### Basic Usage
+```bash
+# Run with default paths (data/2025/details and data/2025)
+python -m src.reconcile
+
+# Run with custom paths
+python -m src.reconcile --statements statements/2025/03 --aggregator aggregator/2025/03
+
+# Run with debug logging
+python -m src.reconcile --debug
+
+# Run with specific log level
+python -m src.reconcile --log-level warning
+```
+
+### Understanding the Results
+After running the reconciliation, you'll find:
+- `output/all_transactions.csv`: Contains all transactions with their reconciliation status
+- `reconciliation_report.txt`: Shows a summary of the reconciliation including:
+  - Total number of transactions
+  - Number of matched transactions
+  - List of unmatched transactions with details
+  - Common issues found during reconciliation
+
+## Troubleshooting
+
+### Common Errors
+- "Invalid file format": Check column headers and file naming
+- "Missing required columns": Verify all required columns are present
+- "Invalid date format": Ensure dates follow the expected format
+- "Amount conversion error": Check for non-numeric characters in amount fields
+
+### Debugging Tips
+- Use the `--debug` flag for detailed logging
+- Check the generated report for details
+- Verify file contents match the expected format
+- Look for patterns in unmatched transactions
 
 ## Development
 
 ### Running Tests
-
 ```bash
 pytest
 ```
 
 ### Test Structure
-
 Tests are organized in numbered files for human readability and use pytest dependency markers to enforce execution order:
 
 1. `conftest.py`: Test fixtures and shared resources
@@ -269,9 +266,7 @@ Tests are organized in numbered files for human readability and use pytest depen
 Each test file builds on the previous ones, with dependency markers ensuring proper execution order. The numbered filenames make it easy to navigate the test suite and understand the progression of tests.
 
 ### Code Style
-
 This project uses black for code formatting:
-
 ```bash
 black .
 ``` 

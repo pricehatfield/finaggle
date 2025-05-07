@@ -216,7 +216,8 @@ class TestReporting:
             'Tags': [''],
             'Date': ['2025-01-01'],
             'YearMonth': ['2025-01'],
-            'Account': ['Matched - source.csv']
+            'Account': ['Matched - source.csv'],
+            'reconciled_key': ['P:2025-01-02_50.00']
         })
 
         unmatched = pd.DataFrame({
@@ -229,7 +230,8 @@ class TestReporting:
             'Tags': [''],
             'Date': ['2025-01-03'],
             'YearMonth': ['2025-01'],
-            'Account': ['Unreconciled - source.csv']
+            'Account': ['Unreconciled - source.csv'],
+            'reconciled_key': ['U:2025-01-03_75.00']
         })
 
         # Save results
@@ -434,7 +436,8 @@ def test_reconciled_output_format(tmp_path):
         'Tags': ['', ''],
         'Date': ['2024-01-01', '2024-01-02'],
         'YearMonth': ['2024-01', '2024-01'],
-        'Account': ['Matched - bank1.csv', 'Matched - bank2.csv']
+        'Account': ['Matched - bank1.csv', 'Matched - bank2.csv'],
+        'reconciled_key': ['P:2024-01-02_100.00', 'T:2024-01-02_50.00']
     }
     matched_df = pd.DataFrame(matched_data)
 
@@ -449,7 +452,8 @@ def test_reconciled_output_format(tmp_path):
         'Tags': ['', ''],
         'Date': ['2024-01-03', '2024-01-04'],
         'YearMonth': ['2024-01', '2024-01'],
-        'Account': ['Unreconciled - bank3.csv', 'Unreconciled - bank4.csv']
+        'Account': ['Unreconciled - bank3.csv', 'Unreconciled - bank4.csv'],
+        'reconciled_key': ['U:2024-01-03_75.00', 'U:2024-01-04_25.00']
     }
     unmatched_df = pd.DataFrame(unmatched_data)
 
