@@ -53,14 +53,15 @@ A Python package for reconciling financial transactions across multiple sources.
   - `Posting Date`: String (MM/DD/YYYY, Python datetime format "%m/%d/%Y", represents post date)
   - `Description`: String (preserved exactly as-is, contains transaction IDs, reference numbers, and special characters)
   - `Amount`: Decimal (already in decimal format, negative for debits, positive for credits)
-  - `Type`: String (preserved exactly as-is)
+  - `Type`: String (preserved exactly as-is, represents transaction classification such as ACH_DEBIT, ACH_CREDIT, etc.)
   - `Balance`: Decimal (already in decimal format)
   - `Check or Slip #`: String (may be empty)
 - **Notes**:
   - Uses transaction type in `Details` column
-  - `Type` provides specific transaction classification
+  - `Type` provides specific transaction classification (e.g., ACH_DEBIT, LOAN_PMT) and is not a vendor/expenditure category
   - Only posting date is provided
   - Amounts are already in decimal format (no $ or commas)
+  - No Category field is present in this format
 
 #### Alliant Checking Format
 - **Columns**:

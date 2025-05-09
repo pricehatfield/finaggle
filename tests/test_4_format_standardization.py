@@ -258,6 +258,7 @@ class TestChaseFormat:
     - Amounts are negative for debits
     - Single date field (used for both transaction and post dates)
     - Preserves original description case
+    - No Category field is provided (Type field is separate transaction classification)
     """
     
     @pytest.mark.dependency()
@@ -268,7 +269,8 @@ class TestChaseFormat:
         - Date standardization (YYYY-MM-DD)
         - Amount sign (negative for debits)
         - Description preservation
-        - Category default (Uncategorized)
+        - Type field is preserved separately (not used as Category)
+        - No Category field is expected
         """
         df = create_test_df('chase')
         result = process_chase_format(df)
@@ -277,7 +279,9 @@ class TestChaseFormat:
         assert result['Post Date'].iloc[0] == '2025-03-17'
         assert result['Description'].iloc[0] == 'AMAZON.COM'
         assert result['Amount'].iloc[0] == -40.33
-        assert result['Category'].iloc[0] == 'Uncategorized'
+        assert 'Type' in result.columns
+        assert result['Type'].iloc[0] == 'ACH_DEBIT'
+        assert 'Category' not in result.columns
     
     @pytest.mark.dependency(depends=["TestChaseFormat::test_basic_processing"])
     def test_amount_handling(self):

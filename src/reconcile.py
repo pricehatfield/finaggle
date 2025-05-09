@@ -316,15 +316,41 @@ def process_chase_format(df: pd.DataFrame) -> pd.DataFrame:
     # Create standardized DataFrame
     result = pd.DataFrame()
     
+    # Log columns and first few rows for debugging
+    logger.debug(f"Processing Chase format with columns: {df.columns.tolist()}")
+    logger.debug(f"First row: {df.iloc[0].to_dict()}")
+    
     # Use posting date for both transaction and post dates
-    result['Transaction Date'] = df['Posting Date'].apply(standardize_date)
-    result['Post Date'] = df['Posting Date'].apply(standardize_date)
+    posting_dates = df['Posting Date']
+    logger.debug(f"Posting Date values: {posting_dates.head().tolist()}")
+    
+    # Apply date standardization with error handling
+    try:
+        result['Transaction Date'] = posting_dates.apply(standardize_date)
+        result['Post Date'] = posting_dates.apply(standardize_date)
+    except ValueError as e:
+        logger.error(f"Date standardization error: {str(e)}")
+        # Check for problematic values
+        for idx, val in posting_dates.items():
+            try:
+                standardize_date(val)
+            except ValueError as e:
+                logger.error(f"Invalid date at index {idx}: {val} - {str(e)}")
+        raise
     
     # Standardize description (strip newlines)
     result['Description'] = df['Description'].apply(standardize_description)
     
     # Standardize amount (negative for debits, positive for credits)
     result['Amount'] = df['Amount'].apply(clean_amount)
+    
+    # Preserve Type field as separate transaction classification
+    if 'Type' in df.columns:
+        result['Type'] = df['Type']
+    
+    # Preserve Check or Slip # field if present
+    if 'Check or Slip #' in df.columns:
+        result['Check or Slip #'] = df['Check or Slip #']
     
     return result
 
@@ -373,7 +399,7 @@ def process_aggregator_format(df: pd.DataFrame) -> pd.DataFrame:
     # Clean and preserve amount
     result['Amount'] = df['Amount'].apply(clean_amount)
     
-    # Preserve Account
+    # Preserve Account (required field)
     result['Account'] = df['Account']
     
     # Preserve Category if present

@@ -307,12 +307,15 @@ class TestFormatValidation:
         - Required columns are present
         - Amount format with negative sign for debits
         - Empty Check or Slip # handling
+        - Type field preservation (not mapped to Category)
         - Additional columns don't prevent format detection
         """
         # Test with required columns only
         df = create_test_format_data('chase')
         result = process_chase_format(df)
         assert result['Amount'].iloc[0] < 0  # Debit amount should be negative
+        assert 'Type' in result.columns  # Type should be preserved
+        assert 'Category' not in result.columns  # No Category mapping
         
         # Test with additional columns
         df = create_test_format_data('chase')
