@@ -460,43 +460,56 @@ def reconcile_transactions(aggregator_df, detail_dfs):
 
     # Match aggregator records to detail records
     for agg_idx, agg_row in aggregator_df.iterrows():
-        # Aggregator uses Transaction Date for matching (as Post Date)
-        agg_key = f"P:{agg_row['Transaction Date']}_{abs(agg_row['Amount']):.2f}"
+        # Generate keys for matching - try Post Date first if available, then Transaction Date
+        agg_keys = []
+        if pd.notna(agg_row.get('Post Date', None)):
+            agg_keys.append(f"P:{agg_row['Post Date']}_{abs(agg_row['Amount']):.2f}")
+        # Always include Transaction Date as a fallback
+        agg_keys.append(f"P:{agg_row['Transaction Date']}_{abs(agg_row['Amount']):.2f}")
+            
         match_found = False
-        if agg_key in detail_key_index:
-            for detail_df_idx, idx, detail_row in detail_key_index[agg_key]:
-                # Only match if not already matched
-                if (detail_df_idx, idx) not in matched_detail_keys:
-                    # Prioritize aggregator fields, only use detail fields if aggregator field is null/empty
-                    matched_record = {
-                        'Transaction Date': agg_row['Transaction Date'],
-                        'YearMonth': agg_row['Transaction Date'][:7],
-                        'Account': agg_row.get('Account', detail_row.get('source_file', '')),
-                        'Description': agg_row.get('Description') if pd.notna(agg_row.get('Description')) else detail_row.get('Description', ''),
-                        'Category': agg_row.get('Category') if pd.notna(agg_row.get('Category')) else detail_row.get('Category', ''),
-                        'Tags': agg_row.get('Tags', ''),
-                        'Amount': agg_row.get('Amount') if pd.notna(agg_row.get('Amount')) else detail_row.get('Amount', 0),
-                        'reconciled_key': agg_key,
-                        'Matched': True
-                    }
-                    matched.append(matched_record)
-                    matched_detail_keys.add((detail_df_idx, idx))
-                    matched_agg_keys.add(agg_idx)
-                    match_found = True
-                    break
+        # Try each key for matching
+        for agg_key in agg_keys:
+            if match_found:
+                break
+                
+            if agg_key in detail_key_index:
+                for detail_df_idx, idx, detail_row in detail_key_index[agg_key]:
+                    # Only match if not already matched
+                    if (detail_df_idx, idx) not in matched_detail_keys:
+                        # Prioritize aggregator fields, only use detail fields if aggregator field is null/empty
+                        matched_record = {
+                            'Transaction Date': agg_row['Transaction Date'],
+                            'YearMonth': agg_row['Transaction Date'][:7],
+                            'Account': agg_row.get('Account', detail_row.get('source_file', '')),
+                            'Description': agg_row.get('Description') if pd.notna(agg_row.get('Description')) else detail_row.get('Description', ''),
+                            'Category': agg_row.get('Category') if pd.notna(agg_row.get('Category')) else detail_row.get('Category', ''),
+                            'Tags': agg_row.get('Tags', ''),
+                            'Amount': agg_row.get('Amount') if pd.notna(agg_row.get('Amount')) else detail_row.get('Amount', 0),
+                            'reconciled_key': agg_key,
+                            'Matched': True
+                        }
+                        matched.append(matched_record)
+                        matched_detail_keys.add((detail_df_idx, idx))
+                        matched_agg_keys.add(agg_idx)
+                        match_found = True
+                        break
+                        
         if not match_found:
-            # Unmatched aggregator record
-            unmatched.append({
+            # Unmatched aggregator record - use the first key generated
+            unmatched_key = agg_keys[0] if agg_keys else f"U:{agg_row['Transaction Date']}_{abs(agg_row['Amount']):.2f}"
+            unmatched_record = {
                 'Transaction Date': agg_row['Transaction Date'],
                 'YearMonth': agg_row['Transaction Date'][:7],
                 'Account': agg_row.get('Account', agg_row.get('source_file', '')),
                 'Description': agg_row['Description'],
-                'Category': agg_row['Category'],
+                'Category': agg_row.get('Category', ''),
                 'Tags': agg_row.get('Tags', ''),
                 'Amount': agg_row['Amount'],
-                'reconciled_key': f"U:{agg_row['Transaction Date']}_{abs(agg_row['Amount']):.2f}",
+                'reconciled_key': unmatched_key.replace('P:', 'U:').replace('T:', 'U:'),
                 'Matched': False
-            })
+            }
+            unmatched.append(unmatched_record)
 
     # Add unmatched detail records
     for detail_df_idx, detail_df in enumerate(detail_dfs):
@@ -509,20 +522,39 @@ def reconcile_transactions(aggregator_df, detail_dfs):
                 else:
                     key = f"U:{row['Transaction Date']}_{abs(row['Amount']):.2f}"
                     date = row['Transaction Date']
-                unmatched.append({
+                unmatched_record = {
                     'Transaction Date': date,
                     'YearMonth': date[:7],
                     'Account': row.get('source_file', ''),
                     'Description': row['Description'],  # Preserve original description
                     'Category': row.get('Category', ''),
-                    'Tags': row.get('Tags', ''),
+                    'Tags': row.get('Tags', ''),  # Ensure Tags field exists but is empty by default
                     'Amount': row['Amount'],  # Preserve original amount
                     'reconciled_key': key,
                     'Matched': False
-                })
+                }
+                unmatched.append(unmatched_record)
 
-    matched_df = pd.DataFrame(matched)
-    unmatched_df = pd.DataFrame(unmatched)
+    # Create DataFrames with consistent columns, even if empty
+    columns = ['Transaction Date', 'YearMonth', 'Account', 'Description', 'Category', 
+               'Tags', 'Amount', 'reconciled_key', 'Matched']
+    
+    if matched:
+        matched_df = pd.DataFrame(matched)
+    else:
+        matched_df = pd.DataFrame(columns=columns)
+    
+    if unmatched:
+        unmatched_df = pd.DataFrame(unmatched)
+    else:
+        unmatched_df = pd.DataFrame(columns=columns)
+        
+    # Ensure Tags field exists in all DataFrames
+    if 'Tags' not in matched_df.columns:
+        matched_df['Tags'] = ''
+    if 'Tags' not in unmatched_df.columns:
+        unmatched_df['Tags'] = ''
+    
     return matched_df, unmatched_df
 
 def identify_format(df):
