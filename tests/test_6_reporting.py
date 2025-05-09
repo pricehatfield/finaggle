@@ -345,8 +345,8 @@ def test_output_format_validation(sample_transactions_df):
         "Amount column should be numeric"
 
     # Test Matched format
-    assert pd.api.types.is_bool_dtype(sample_transactions_df['Matched']), \
-        "Matched should be boolean"
+    assert sample_transactions_df['Matched'].isin(["True", "False"]).all(), \
+        "Matched should be either 'True' or 'False'"
 
     # Test reconciled_key format
     assert sample_transactions_df['reconciled_key'].str.match(r'^[PTU]:\d{4}-\d{2}-\d{2}_\d+\.\d{2}$').all(), \
@@ -395,7 +395,7 @@ def test_report_generation_empty_data(tmp_path):
         assert "No unmatched transactions found" in content
 
 def test_save_reconciliation_results(sample_matched_df, sample_unmatched_df, tmp_path):
-    """Test saving reconciliation results to CSV files."""
+    """Test saving reconciliation results to CSV file."""
     # Save results
     output_dir = tmp_path / "output"
     save_reconciliation_results(sample_matched_df, sample_unmatched_df, output_dir)
@@ -408,12 +408,12 @@ def test_save_reconciliation_results(sample_matched_df, sample_unmatched_df, tmp
     df = pd.read_csv(all_transactions_path)
     assert 'Matched' in df.columns
     assert len(df) == len(sample_matched_df) + len(sample_unmatched_df)
-    assert df['Matched'].sum() == len(sample_matched_df)  # Count of True values should equal matches length
-    assert (~df['Matched']).sum() == len(sample_unmatched_df)  # Count of False values should equal unmatched length
+    assert (df['Matched'] == "True").sum() == len(sample_matched_df)  # Count of "True" values should equal matches length
+    assert (df['Matched'] == "False").sum() == len(sample_unmatched_df)  # Count of "False" values should equal unmatched length
     
     # Verify data integrity
-    matched_rows = df[df['Matched']]
-    unmatched_rows = df[~df['Matched']]
+    matched_rows = df[df['Matched'] == "True"]
+    unmatched_rows = df[df['Matched'] == "False"]
     
     # Check matched transactions
     assert all(matched_rows['Description'].isin(sample_matched_df['Description']))

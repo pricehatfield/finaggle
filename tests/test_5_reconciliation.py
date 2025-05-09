@@ -193,45 +193,51 @@ class TestReconciliation:
     
     def test_basic_matching(self):
         """Test basic transaction matching"""
-        source_df = pd.DataFrame({
+        aggregator_df = pd.DataFrame({
             'Transaction Date': ['2025-01-01'],
             'Post Date': ['2025-01-02'],
             'Description': ['test transaction'],
             'Amount': [-50.00],
-            'Category': ['shopping']
+            'Category': ['shopping'],
+            'Account': ['Test Account']
         })
         
-        target_df = pd.DataFrame({
+        detail_df = pd.DataFrame({
             'Transaction Date': ['2025-01-01'],
             'Post Date': ['2025-01-02'],
             'Description': ['test transaction'],
             'Amount': [-50.00],
-            'Category': ['shopping']
+            'Category': ['shopping'],
+            'source_file': ['test_target.csv']
         })
         
-        matches, unmatched = reconcile_transactions(source_df, [target_df])
+        # Use aggregator as first argument, detail as second argument
+        matches, unmatched = reconcile_transactions(aggregator_df, [detail_df])
         assert len(matches) == 1
         assert len(unmatched) == 0
     
     def test_multiple_matches(self):
         """Test multiple transaction matches"""
-        source_df = pd.DataFrame({
+        aggregator_df = pd.DataFrame({
             'Transaction Date': ['2025-01-01', '2025-01-02'],
             'Post Date': ['2025-01-02', '2025-01-03'],
             'Description': ['test transaction 1', 'test transaction 2'],
             'Amount': [-50.00, -75.00],
-            'Category': ['shopping', 'dining']
+            'Category': ['shopping', 'dining'],
+            'Account': ['Test Account 1', 'Test Account 2']
         })
         
-        target_df = pd.DataFrame({
+        detail_df = pd.DataFrame({
             'Transaction Date': ['2025-01-01', '2025-01-02'],
             'Post Date': ['2025-01-02', '2025-01-03'],
             'Description': ['test transaction 1', 'test transaction 2'],
             'Amount': [-50.00, -75.00],
-            'Category': ['shopping', 'dining']
+            'Category': ['shopping', 'dining'],
+            'source_file': ['test_target.csv', 'test_target.csv']
         })
         
-        matches, unmatched = reconcile_transactions(source_df, [target_df])
+        # Use aggregator as first argument, detail as second argument
+        matches, unmatched = reconcile_transactions(aggregator_df, [detail_df])
         assert len(matches) == 2
         assert len(unmatched) == 0
     
@@ -259,23 +265,26 @@ class TestReconciliation:
     
     def test_duplicate_handling(self):
         """Test handling of duplicate transactions"""
-        source_df = pd.DataFrame({
+        aggregator_df = pd.DataFrame({
             'Transaction Date': ['2025-01-01', '2025-01-01'],
             'Post Date': ['2025-01-02', '2025-01-02'],
             'Description': ['test transaction', 'test transaction'],
             'Amount': [-50.00, -50.00],
-            'Category': ['shopping', 'shopping']
+            'Category': ['shopping', 'shopping'],
+            'Account': ['Test Account', 'Test Account']
         })
         
-        target_df = pd.DataFrame({
+        detail_df = pd.DataFrame({
             'Transaction Date': ['2025-01-01'],
             'Post Date': ['2025-01-02'],
             'Description': ['test transaction'],
             'Amount': [-50.00],
-            'Category': ['shopping']
+            'Category': ['shopping'],
+            'source_file': ['test_target.csv']
         })
         
-        matches, unmatched = reconcile_transactions(source_df, [target_df])
+        # Use aggregator as first argument, detail as second argument
+        matches, unmatched = reconcile_transactions(aggregator_df, [detail_df])
         assert len(matches) == 1
         assert len(unmatched) == 1
     
@@ -352,23 +361,26 @@ class TestReconciliation:
 
     def test_reconciled_key_format(self):
         """Test that reconciled keys are in the correct format"""
-        source_df = pd.DataFrame({
+        aggregator_df = pd.DataFrame({
             'Transaction Date': ['2025-01-01'],
             'Post Date': ['2025-01-02'],
             'Description': ['test transaction'],
             'Amount': [-50.00],
-            'Category': ['shopping']
+            'Category': ['shopping'],
+            'Account': ['Test Account']
         })
         
-        target_df = pd.DataFrame({
+        detail_df = pd.DataFrame({
             'Transaction Date': ['2025-01-01'],
             'Post Date': ['2025-01-02'],
             'Description': ['test transaction'],
             'Amount': [-50.00],
-            'Category': ['shopping']
+            'Category': ['shopping'],
+            'source_file': ['test_target.csv']
         })
         
-        matches, unmatched = reconcile_transactions(source_df, [target_df])
+        # Use aggregator as first argument, detail as second argument
+        matches, unmatched = reconcile_transactions(aggregator_df, [detail_df])
         
         # Verify matched transaction key format
         assert matches['reconciled_key'].iloc[0] == 'P:2025-01-01_50.00'
@@ -392,6 +404,113 @@ class TestReconciliation:
         
         matches, unmatched = reconcile_transactions(source_df, [target_df])
         assert unmatched['reconciled_key'].iloc[0] == 'U:2025-01-01_50.00'
+
+    def test_tag_preservation(self):
+        """Test that tags from aggregator are preserved in reconciliation output.
+        
+        Verifies:
+        - Tags from aggregator are preserved in matched records
+        - Tags from aggregator are preserved in unmatched aggregator records
+        - Empty tags for unmatched detail records
+        """
+        # Create test data
+        aggregator_df = create_test_aggregator_data()
+        detail_df = create_test_detail_data()
+        
+        # Run reconciliation
+        matches_df, unmatched_df = reconcile_transactions(aggregator_df, [detail_df])
+        
+        # Check matched records
+        assert not matches_df.empty
+        assert 'Tags' in matches_df.columns
+        assert matches_df['Tags'].tolist() == ['Online', 'Subscription', 'Groceries']
+        
+        # Check unmatched records (should be empty in this case since all records match)
+        assert unmatched_df.empty
+
+        # Test with mismatched data to verify unmatched behavior
+        detail_df_modified = detail_df.copy()
+        detail_df_modified['Amount'] = [-41.33, -14.99, -51.00]  # Change amounts to force unmatched
+        
+        matches_df, unmatched_df = reconcile_transactions(aggregator_df, [detail_df_modified])
+        
+        # Check unmatched aggregator records - now filter on Account field containing 'aggregator'
+        aggregator_unmatched = unmatched_df[unmatched_df['Account'].str.contains('aggregator')]
+        assert not aggregator_unmatched.empty
+        assert aggregator_unmatched['Tags'].tolist() == ['Online', 'Subscription', 'Groceries']
+        
+        # Check unmatched detail records - filter on Account field containing 'discover'
+        detail_unmatched = unmatched_df[unmatched_df['Account'].str.contains('discover')]
+        assert not detail_unmatched.empty
+        assert all(tag == '' for tag in detail_unmatched['Tags'])
+
+    def test_aggregator_field_precedence(self):
+        """Test that aggregator fields take precedence over detail fields for matched transactions.
+        
+        This test verifies:
+        - For matched transactions, all fields available in the aggregator record take precedence
+        - Detail record fields are only used when the corresponding aggregator field is null/empty
+        - This applies to: Date, Account, Description, Category, Amount fields
+        - Tags are exclusively sourced from the aggregator
+        """
+        # Create test data with different values in aggregator vs detail
+        aggregator_df = pd.DataFrame({
+            'Transaction Date': ['2025-03-17'],  # Both aggregator and detail use the same date
+            'Description': ['AMAZON AGGREGATOR DESC'],  # Different from detail
+            'Amount': [-40.33],
+            'Category': ['Aggregator Category'],  # Different from detail
+            'Account': ['Aggregator Account'],    # Different from detail
+            'Tags': ['Aggregator Tag'],           # Only in aggregator
+            'source_file': ['aggregator']
+        })
+        
+        detail_df = pd.DataFrame({
+            'Transaction Date': ['2025-03-17'],  # Both aggregator and detail use the same date
+            'Post Date': ['2025-03-17'],         # Same as Transaction Date for testing
+            'Description': ['AMAZON DETAIL DESC'],  # Different from aggregator
+            'Amount': [-40.33],                     # Same as aggregator for matching
+            'Category': ['Detail Category'],        # Different from aggregator
+            'source_file': ['detail']
+        })
+        
+        # Print dataframes for debugging
+        print("\nAggregator DataFrame:")
+        print(aggregator_df)
+        print("\nDetail DataFrame:")
+        print(detail_df)
+        
+        # Run reconciliation - we need to use P: keys for matching
+        agg_key = f"P:{aggregator_df['Transaction Date'].iloc[0]}_{abs(aggregator_df['Amount'].iloc[0]):.2f}"
+        detail_key = f"P:{detail_df['Post Date'].iloc[0]}_{abs(detail_df['Amount'].iloc[0]):.2f}"
+        print(f"\nAggregator key: {agg_key}")
+        print(f"Detail key: {detail_key}")
+        
+        matches_df, unmatched_df = reconcile_transactions(aggregator_df, [detail_df])
+        
+        print("\nMatched DataFrame:")
+        print(matches_df if not matches_df.empty else "No matches found!")
+        print("\nUnmatched DataFrame:")
+        print(unmatched_df)
+        
+        # Verify matched transaction uses aggregator's fields for all available fields
+        assert not matches_df.empty, "No matches found between aggregator and detail records"
+        assert matches_df['Description'].iloc[0] == 'AMAZON AGGREGATOR DESC', f"Expected 'AMAZON AGGREGATOR DESC' but got {matches_df['Description'].iloc[0]}"
+        assert matches_df['Category'].iloc[0] == 'Aggregator Category', f"Expected 'Aggregator Category' but got {matches_df['Category'].iloc[0]}"
+        assert matches_df['Amount'].iloc[0] == -40.33, f"Expected -40.33 but got {matches_df['Amount'].iloc[0]}"
+        assert matches_df['Account'].iloc[0] == 'Aggregator Account', f"Expected 'Aggregator Account' but got {matches_df['Account'].iloc[0]}"
+        assert matches_df['Tags'].iloc[0] == 'Aggregator Tag', f"Expected 'Aggregator Tag' but got {matches_df['Tags'].iloc[0]}"
+        
+        # Test with null fields in aggregator
+        aggregator_df_null = aggregator_df.copy()
+        aggregator_df_null['Category'] = None  # Null category in aggregator
+        aggregator_df_null['Description'] = None  # Null description in aggregator
+        
+        matches_df, unmatched_df = reconcile_transactions(aggregator_df_null, [detail_df])
+        
+        # Verify detail fields are used when aggregator fields are null
+        assert not matches_df.empty, "No matches found with null aggregator field"
+        assert matches_df['Description'].iloc[0] == 'AMAZON DETAIL DESC', f"Expected 'AMAZON DETAIL DESC' but got {matches_df['Description'].iloc[0]}"
+        assert matches_df['Category'].iloc[0] == 'Detail Category', f"Expected 'Detail Category' but got {matches_df['Category'].iloc[0]}"
 
 def test_calculate_discrepancies():
     """Test the calculate_discrepancies function"""
@@ -424,6 +543,7 @@ def create_test_aggregator_data():
         'Amount': [-40.33, -13.99, -50.00],
         'Category': ['Shopping', 'Entertainment', 'Shopping'],
         'Tags': ['Online', 'Subscription', 'Groceries'],
+        'Account': ['Aggregator Account', 'Aggregator Account', 'Aggregator Account'],
         'source_file': ['aggregator', 'aggregator', 'aggregator']
     })
 
@@ -436,43 +556,4 @@ def create_test_detail_data():
         'Amount': [-40.33, -13.99, -50.00],
         'Category': ['Shopping', 'Entertainment', 'Shopping'],
         'source_file': ['discover', 'discover', 'discover']
-    })
-
-def test_tag_preservation():
-    """Test that tags from aggregator are preserved in reconciliation output.
-    
-    Verifies:
-    - Tags from aggregator are preserved in matched records
-    - Tags from aggregator are preserved in unmatched aggregator records
-    - Empty tags for unmatched detail records
-    """
-    # Create test data
-    aggregator_df = create_test_aggregator_data()
-    detail_df = create_test_detail_data()
-    
-    # Run reconciliation
-    matches_df, unmatched_df = reconcile_transactions(aggregator_df, [detail_df])
-    
-    # Check matched records
-    assert not matches_df.empty
-    assert 'Tags' in matches_df.columns
-    assert matches_df['Tags'].tolist() == ['Online', 'Subscription', 'Groceries']
-    
-    # Check unmatched records (should be empty in this case since all records match)
-    assert unmatched_df.empty
-
-    # Test with mismatched data to verify unmatched behavior
-    detail_df_modified = detail_df.copy()
-    detail_df_modified['Amount'] = [-41.33, -14.99, -51.00]  # Change amounts to force unmatched
-    
-    matches_df, unmatched_df = reconcile_transactions(aggregator_df, [detail_df_modified])
-    
-    # Check unmatched aggregator records
-    aggregator_unmatched = unmatched_df[unmatched_df['source_file'] == 'aggregator']
-    assert not aggregator_unmatched.empty
-    assert aggregator_unmatched['Tags'].tolist() == ['Online', 'Subscription', 'Groceries']
-    
-    # Check unmatched detail records
-    detail_unmatched = unmatched_df[unmatched_df['source_file'] == 'discover']
-    assert not detail_unmatched.empty
-    assert all(tag == '' for tag in detail_unmatched['Tags']) 
+    }) 

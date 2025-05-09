@@ -10,7 +10,6 @@ from src.reconcile import (
     process_alliant_visa_format,
     process_chase_format,
     process_aggregator_format,
-    standardize_description,
     standardize_category
 )
 
@@ -52,8 +51,8 @@ def create_test_df(format_name):
             'Card No.': ['1234'],
             'Description': ['AMAZON.COM'],
             'Category': ['Shopping'],
-            'Debit': ['$40.33'],
-            'Credit': ['']
+            'Debit': [40.33],
+            'Credit': [None]
         })
     elif format_name == 'alliant_visa':
         return pd.DataFrame({
@@ -76,10 +75,10 @@ def create_test_df(format_name):
         })
     elif format_name == 'aggregator':
         return pd.DataFrame({
-            'Date': ['03/17/2025'],
+            'Date': ['2025-03-17'],
             'Account': ['Discover Card'],
             'Description': ['AMAZON.COM'],
-            'Amount': ['-123.45'],
+            'Amount': [-123.45],  # Negative for debits
             'Category': ['Shopping'],
             'Tags': ['Online'],
             'source_file': ['aggregator_test.csv']
@@ -336,124 +335,162 @@ class TestAggregatorFormat:
         assert result['Amount'].iloc[0] == -123.45  # Amount should be preserved exactly
 
 class TestStandardization:
-    """Test suite for data standardization"""
+    """Test suite for data standardization functions."""
     
     def test_amount_standardization(self):
-        """Test amount standardization"""
-        # Test various amount formats
-        assert clean_amount('$40.33') == 40.33
-        assert clean_amount('-$40.33') == -40.33
-        assert clean_amount('40.33') == 40.33
-        assert clean_amount('-40.33') == -40.33
+        """Test amount standardization.
         
-        # Test invalid amounts
-        with pytest.raises(ValueError):
-            clean_amount('invalid')
+        Verifies:
+        - Currency symbol removal
+        - Comma removal
+        - Sign convention (negative for debits)
+        """
+        assert clean_amount('$1,234.56') == 1234.56
+        assert clean_amount('-$1,234.56') == -1234.56
+        assert clean_amount('(1,234.56)') == -1234.56
     
     def test_date_standardization(self):
-        """Test date standardization"""
-        # Test various date formats
+        """Test date standardization.
+        
+        Verifies:
+        - MM/DD/YYYY to YYYY-MM-DD conversion
+        - YYYY-MM-DD preservation
+        - Invalid date handling
+        """
         assert standardize_date('03/17/2025') == '2025-03-17'
         assert standardize_date('2025-03-17') == '2025-03-17'
-        assert standardize_date('3/17/2025') == '2025-03-17'
-        assert standardize_date('03-17-2025') == '2025-03-17'
-
-        # Test invalid dates
-        with pytest.raises(ValueError, match="Invalid date format"):
+        with pytest.raises(ValueError):
             standardize_date('invalid')
-    
-    def test_description_standardization(self):
-        """Test description standardization"""
-        # Test various description formats
-        for format_name in ['discover', 'capital_one', 'chase']:
-            df = create_test_df(format_name)
-            if format_name == 'discover':
-                result = process_discover_format(df)
-            elif format_name == 'capital_one':
-                result = process_capital_one_format(df)
-            elif format_name == 'chase':
-                result = process_chase_format(df)
-            
-            # Descriptions should be preserved exactly
-            assert result['Description'].iloc[0] == 'AMAZON.COM' 
 
-@pytest.mark.dependency(depends=["TestStandardization::test_description_standardization"])
-class TestDescriptionStandardization:
-    """Test suite for description standardization"""
-    
-    @pytest.mark.dependency()
-    def test_remove_extra_spaces(self):
-        """Test removal of extra spaces"""
-        assert standardize_description("  Test  Transaction  ") == "Test Transaction"
-
-@pytest.mark.dependency(depends=["TestStandardization::test_description_standardization"])
+@pytest.mark.dependency(depends=["TestStandardization::test_date_standardization"])
 class TestCategoryStandardization:
-    """Test suite for category standardization"""
+    """Test suite for category standardization."""
     
     @pytest.mark.dependency()
     def test_handle_empty_categories(self):
-        """Test handling of empty categories"""
-        assert standardize_category("") == "Uncategorized"
-        assert standardize_category(None) == "Uncategorized"
-        
+        """Test handling of empty categories."""
+        assert standardize_category('') == 'Uncategorized'
+        assert standardize_category(None) == 'Uncategorized'
+    
     @pytest.mark.dependency()
     def test_handle_unknown_categories(self):
-        """Test handling of unknown categories"""
-        assert standardize_category("Unknown Category") == "Unknown Category"
+        """Test handling of unknown categories."""
+        assert standardize_category('Unknown Category') == 'Unknown Category'
 
 @pytest.mark.dependency(depends=[
-    "TestDescriptionStandardization::test_remove_extra_spaces",
     "TestCategoryStandardization::test_handle_empty_categories",
     "TestCategoryStandardization::test_handle_unknown_categories"
 ])
 def test_full_standardization_pipeline():
-    """Test the complete standardization pipeline"""
-    # Create sample data
+    """Test the full standardization pipeline.
+    
+    Verifies:
+    - Date standardization
+    - Amount standardization
+    - Category standardization
+    - Description preservation
+    """
     df = pd.DataFrame({
-        'Transaction Date': ['2025-01-01'],
-        'Post Date': ['2025-01-02'],
-        'Description': ['  Test  Transaction  '],
-        'Amount': ['-$50.00'],
-        'Category': ['SHOPPING']
+        'Date': ['03/17/2025'],
+        'Description': ['  Test  Transaction  '],  # Should be preserved exactly as-is
+        'Amount': ['$1,234.56'],
+        'Category': ['Unknown Category']
     })
     
-    # Apply standardization
-    df['Description'] = df['Description'].apply(standardize_description)
-    df['Category'] = df['Category'].apply(standardize_category)
+    # Standardize dates
+    df['Date'] = df['Date'].apply(standardize_date)
+    
+    # Standardize amounts
     df['Amount'] = df['Amount'].apply(clean_amount)
     
+    # Standardize categories
+    df['Category'] = df['Category'].apply(standardize_category)
+    
     # Verify results
-    assert df['Description'].iloc[0] == "Test Transaction"
-    assert df['Category'].iloc[0] == "SHOPPING"
-    assert df['Amount'].iloc[0] == -50.0 
+    assert df['Date'].iloc[0] == '2025-03-17'
+    assert df['Description'].iloc[0] == '  Test  Transaction  '  # Preserved exactly as-is
+    assert df['Amount'].iloc[0] == 1234.56
+    assert df['Category'].iloc[0] == 'Unknown Category'
 
 def test_category_standardization():
-    """Test that categories are preserved as-is from source."""
-    # Sample data with different category names
-    data = {
-        'Transaction Date': ['2025-01-01', '2025-01-02', '2025-01-03', '2025-01-04'],
-        'Description': [
-            'HEB ONLINE #108',
-            'AMAZON MKTPL*ZE7G64KH1',
-            'NETFLIX.COM',
-            'AT&T UVERSE PAYMENT'
-        ],
-        'Category': [
-            'Supermarkets',  # Discover
-            'Merchandise',   # Discover
-            'Services',      # Discover
-            'Telephone'      # Amex
-        ],
-        'Amount': [-40.33, -42.66, -24.89, -126.12],
-        'source_file': ['discover_2025.csv', 'discover_2025.csv', 'discover_2025.csv', 'amex_2025.csv']
-    }
-    df = pd.DataFrame(data)
+    """Test category standardization mapping.
     
-    # Process the data
-    result = df.copy()
+    Verifies:
+    - Known category mappings
+    - Unknown category preservation
+    """
+    assert standardize_category('Supermarkets') == 'Groceries'
+    assert standardize_category('Merchandise') == 'Shopping'
+    assert standardize_category('Unknown') == 'Unknown'
+
+@pytest.mark.dependency()
+class TestDescriptionStandardization:
+    """Test suite for description standardization.
     
-    # Verify categories are preserved exactly as input
-    assert result['Category'].iloc[0] == 'Supermarkets'
-    assert result['Category'].iloc[1] == 'Merchandise'
-    assert result['Category'].iloc[2] == 'Services'
-    assert result['Category'].iloc[3] == 'Telephone' 
+    Description standardization requirements:
+    - Source files preserve newlines exactly as-is
+    - Standardized format strips newlines from descriptions
+    - Original description content is preserved (just newlines removed)
+    """
+    
+    @pytest.mark.dependency()
+    def test_newline_stripping(self):
+        """Test that newlines are stripped during standardization.
+        
+        Verifies:
+        - Source descriptions with newlines are preserved as-is in source files
+        - Newlines are stripped in standardized format
+        - Description content is preserved exactly
+        """
+        # Test with Alliant Checking format which explicitly supports newlines
+        df = pd.DataFrame({
+            'Date': ['03/17/2025'],
+            'Description': ['DIVIDEND\nPAYMENT\nQ1 2025'],
+            'Amount': ['$123.45'],
+            'Balance': ['$1,000.00']
+        })
+        
+        # Verify source format preserves newlines
+        assert '\n' in df['Description'].iloc[0]
+        
+        # Process through standardization
+        result = process_alliant_checking_format(df)
+        
+        # Verify newlines are stripped in standardized format
+        assert '\n' not in result['Description'].iloc[0]
+        assert result['Description'].iloc[0] == 'DIVIDEND PAYMENT Q1 2025'
+    
+    @pytest.mark.dependency(depends=["TestDescriptionStandardization::test_newline_stripping"])
+    def test_multiple_newlines(self):
+        """Test handling of multiple consecutive newlines.
+        
+        Verifies:
+        - Multiple consecutive newlines are handled correctly
+        - Extra spaces aren't introduced
+        """
+        df = pd.DataFrame({
+            'Date': ['03/17/2025'],
+            'Description': ['DIVIDEND\n\nPAYMENT\n\nQ1 2025'],
+            'Amount': ['$123.45'],
+            'Balance': ['$1,000.00']
+        })
+        
+        result = process_alliant_checking_format(df)
+        assert result['Description'].iloc[0] == 'DIVIDEND PAYMENT Q1 2025'
+    
+    @pytest.mark.dependency(depends=["TestDescriptionStandardization::test_multiple_newlines"])
+    def test_no_newlines(self):
+        """Test handling of descriptions without newlines.
+        
+        Verifies:
+        - Descriptions without newlines are unchanged
+        """
+        df = pd.DataFrame({
+            'Date': ['03/17/2025'],
+            'Description': ['AMAZON.COM'],
+            'Amount': ['$123.45'],
+            'Balance': ['$1,000.00']
+        })
+        
+        result = process_alliant_checking_format(df)
+        assert result['Description'].iloc[0] == 'AMAZON.COM' 

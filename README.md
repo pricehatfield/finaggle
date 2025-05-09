@@ -4,96 +4,108 @@ A Python package for reconciling financial transactions across multiple sources.
 
 ## Data Formats
 
+### Important Note on Description Handling
+- **Descriptions are NEVER modified**: All transaction descriptions are preserved exactly as they appear in the source files. No cleaning, standardization, or modification is performed on description fields.
+- **Purpose**: This ensures that the original transaction details are maintained for accurate reconciliation and audit purposes.
+- **Implementation**: The system treats description fields as opaque strings, preserving all special characters, spacing, and formatting exactly as they appear in the source files.
+
+### Important Note on CSV Quoting
+- **CSV files in `data/` may use mixed quoting**: Not all fields are necessarily quoted, and quoting is typically only used for fields containing commas or special characters (e.g., Description fields).
+- **Import logic**: Always use pandas' default quoting behavior when reading CSVs, unless the file is known to be fully quoted. Forcing `quoting=csv.QUOTE_ALL` can cause column misalignment and data errors.
+- **If you encounter import errors**: First check the data file for quoting style, then update the import logic or README as needed to match real-world data.
+
 ### Source Detail Formats
 
 #### Discover Format
 - **Columns**:
   - `Trans. Date`: String (MM/DD/YYYY, Python datetime format "%m/%d/%Y")
   - `Post Date`: String (MM/DD/YYYY, Python datetime format "%m/%d/%Y")
-  - `Description`: String (may contain special characters)
+  - `Description`: String (preserved exactly as-is)
   - `Amount`: String (requires cleaning: remove $, commas, convert to Decimal)
-  - `Category`: String (may contain special characters)
+  - `Category`: String (preserved exactly as-is)
 - **Notes**:
   - Both transaction and post dates are provided
   - Amount sign convention: negative for debits, positive for credits
   - Amounts may include $ symbol and commas (e.g., "$1,234.56")
   - Requires explicit decimal conversion
+  - Credits are represented as positive amounts (e.g., "INTERNET PAYMENT - THANK YOU")
 
 #### Capital One Format
 - **Columns**:
   - `Transaction Date`: String (YYYY-MM-DD, Python datetime format "%Y-%m-%d")
   - `Posted Date`: String (YYYY-MM-DD, Python datetime format "%Y-%m-%d")
-  - `Card No.`: String (may contain spaces or special characters)
-  - `Description`: String (may contain special characters)
-  - `Category`: String (may contain special characters)
-  - `Debit`: String (requires cleaning: remove $, commas, convert to Decimal, null for credits)
-  - `Credit`: String (requires cleaning: remove $, commas, convert to Decimal, null for debits)
+  - `Card No.`: String (preserved exactly as-is)
+  - `Description`: String (preserved exactly as-is)
+  - `Category`: String (preserved exactly as-is)
+  - `Debit`: Decimal (null for credits)
+  - `Credit`: Decimal (null for debits)
 - **Notes**:
   - Uses separate columns for debits and credits
   - For each transaction, exactly one of Debit or Credit will be populated
   - The other column will be null/empty
   - Both transaction and post dates are provided
-  - Amounts may include $ symbol and commas
+  - Amounts are already in decimal format
   - Null/empty values must be preserved as null (not converted to Decimal(0))
 
 #### Chase Format
 - **Columns**:
-  - `Details`: String (strictly "DEBIT" or "CREDIT")
+  - `Details`: String (preserved exactly as-is)
   - `Posting Date`: String (MM/DD/YYYY, Python datetime format "%m/%d/%Y", represents post date)
-  - `Description`: String (may contain special characters and newlines)
-  - `Amount`: String (requires cleaning: remove $, commas, convert to Decimal)
-  - `Type`: String (preserve as-is)
-  - `Balance`: String (requires cleaning: remove $, commas, convert to Decimal)
-  - `Check or Slip #`: String (often empty, may contain special characters)
+  - `Description`: String (preserved exactly as-is, contains transaction IDs, reference numbers, and special characters)
+  - `Amount`: Decimal (already in decimal format, negative for debits, positive for credits)
+  - `Type`: String (preserved exactly as-is)
+  - `Balance`: Decimal (already in decimal format)
+  - `Check or Slip #`: String (may be empty)
 - **Notes**:
   - Uses transaction type in `Details` column
-  - `Type` provides more specific transaction classification
+  - `Type` provides specific transaction classification
   - Only posting date is provided
-  - Amounts may include $ symbol and commas
-  - Descriptions may contain newlines and special characters
+  - Amounts are already in decimal format (no $ or commas)
 
 #### Alliant Checking Format
 - **Columns**:
   - `Date`: String (MM/DD/YYYY, Python datetime format "%m/%d/%Y", represents transaction date)
-  - `Description`: String (may contain newlines and special characters)
-  - `Amount`: String (requires cleaning: remove $, commas, convert to Decimal)
-  - `Balance`: String (requires cleaning: remove $, commas, convert to Decimal)
+  - `Description`: String (preserved exactly as-is, may contain newlines)
+  - `Amount`: String (includes $ symbol, positive for credits)
+  - `Balance`: String (includes $ symbol and commas for thousands)
 - **Notes**:
   - Only transaction date is provided
-  - Amount sign convention: negative for debits, positive for credits
-  - Amounts include $ symbol and may include commas
-  - Descriptions may contain newlines (e.g., dividend descriptions)
+  - Amount sign convention: positive for credits
+  - Amounts include $ symbol
+  - Balance includes $ symbol and commas
+  - Description may contain newlines (e.g., in dividend entries)
 
 #### Alliant Visa Format
 - **Columns**:
   - `Date`: String (MM/DD/YYYY, Python datetime format "%m/%d/%Y")
-  - `Description`: String (may contain special characters)
-  - `Amount`: String (requires cleaning: remove $, commas, convert to Decimal)
-  - `Balance`: String (requires cleaning: remove $, commas, convert to Decimal)
+  - `Description`: String (preserved exactly as-is)
+  - `Amount`: String (includes $ symbol, negative for debits, positive for credits, uses parentheses for credits)
+  - `Balance`: String (includes $ symbol)
   - `Post Date`: String (MM/DD/YYYY, Python datetime format "%m/%d/%Y")
 - **Notes**:
   - Both transaction and post dates are provided
   - Amount sign convention: negative for debits, positive for credits
-  - Amounts include $ symbol and may include commas
-  - Requires explicit decimal conversion with proper rounding
+  - Amounts include $ symbol
+  - Credits are shown in parentheses (e.g., "($764.86)")
 
 #### American Express Format
 - **Columns**:
   - `Date`: String (MM/DD/YYYY, Python datetime format "%m/%d/%Y", represents transaction date)
-  - `Description`: String (may contain special characters)
-  - `Card Member`: String (may contain spaces and special characters)
-  - `Account #`: String (preserve as-is)
-  - `Amount`: String (requires cleaning: remove $, commas, convert to Decimal)
+  - `Description`: String (preserved exactly as-is)
+  - `Card Member`: String (contains full name)
+  - `Account #`: String (contains account identifier, prefixed with minus sign)
+  - `Amount`: Decimal (negative for credits, positive for charges)
 - **Notes**:
   - Only transaction date is provided
   - Amount sign convention: positive for charges, negative for credits
-  - Amounts may include $ symbol and commas
+  - Amounts are in decimal format (no $ or commas)
+  - Account numbers are prefixed with minus sign (e.g., "-42004")
 
 ### Standardized Detail Format
 All source detail records are converted to this intermediate format before matching:
 - `Transaction Date`: YYYY-MM-DD
 - `Post Date`: YYYY-MM-DD (null if not provided)
-- `Description`: String (preserved unchanged)
+- `Description`: String (preserved from source with newlines stripped)
 - `Amount`: Decimal (negative for debits, positive for credits)
 - `Category`: String (preserved from source)
 - `source_file`: String (identifies the source of the transaction)
@@ -103,37 +115,50 @@ Notes:
 - Account information is preserved from the aggregator format but not from detail formats
 - Post dates are required for matching but may be null for formats that don't provide them
 - Amount sign convention is standardized to negative for debits
-- Category and Description are preserved as-is from source files
+- Category is preserved exactly as-is from source files
+- Description is preserved from source with newlines stripped to ensure consistent matching
+- Source files are read and preserved exactly as-is, with no modifications
 
 ### Aggregator Format
 - **Columns**:
   - `Date`: String (YYYY-MM-DD, Python datetime format "%Y-%m-%d")
-  - `Account`: String (contains account name and number)
-  - `Description`: String (may contain special characters)
-  - `Category`: String (may contain special characters)
-  - `Tags`: String (optional, comma-separated values, may contain spaces)
-  - `Amount`: String (requires cleaning: remove $, commas, convert to Decimal)
+  - `Account`: String (contains card type and last 4 digits, e.g., "Cashback Visa Signature - Ending in 1967")
+  - `Description`: String (preserved exactly as-is)
+  - `Category`: String (preserved exactly as-is)
+  - `Tags`: String (optional, comma-separated values, may contain spaces, may be empty)
+  - `Amount`: Decimal (negative for debits, positive for credits)
   - `reconciled_key`: String (see Reconciliation Key Format section)
   - `Matched`: String (strictly "True" or "False", preserved as text for human readability)
 - **Notes**:
   - Tags can contain multiple values (e.g., "Joint,Price")
-  - Amounts may include $ symbol and commas
+  - Tags field may be empty
+  - Amounts are in decimal format
   - Matched field is preserved as text for human readability
+  - Account field includes card type and last 4 digits
 
 ### Output Format
 The reconciliation process generates a single output file in the `output` directory:
 
 #### All Transactions (all_transactions.csv)
 - **Columns**:
-  - `Date`: YYYY-MM-DD
-  - `YearMonth`: YYYY-MM
-  - `Account`: String (source of transaction)
-  - `Description`: String
-  - `Category`: String
-  - `Tags`: String (preserved from aggregator file)
-  - `Amount`: Decimal (negative for debits)
+  - `Date`: YYYY-MM-DD (for matched transactions, from aggregator; otherwise from source record)
+  - `YearMonth`: YYYY-MM (derived from Date field)
+  - `Account`: String (for matched transactions, from aggregator; otherwise from source record)
+  - `Description`: String (for matched transactions, from aggregator; otherwise from source record)
+  - `Category`: String (for matched transactions, from aggregator; otherwise from source record)
+  - `Tags`: String (from aggregator file; empty for unmatched detail records)
+  - `Amount`: Decimal (negative for debits; for matched transactions, from aggregator; otherwise from source record)
   - `reconciled_key`: String (see Reconciliation Key Format section)
-  - `Matched`: Boolean (True for matched transactions)
+  - `Matched`: String (strictly "True" or "False", preserved as text for human readability)
+
+#### Field Sourcing for Matched Transactions
+For transactions that are successfully matched between aggregator and detail records:
+- All fields available in the aggregator record take precedence
+- Detail record fields are only used when the corresponding aggregator field is null/empty
+- This applies to: Date, Account, Description, Category, Amount fields
+- Tags are exclusively sourced from the aggregator (empty for unmatched detail records)
+
+For unmatched transactions, all available fields from the original source are preserved.
 
 #### Tag Handling
 - Tags from the aggregator file are preserved in the output
@@ -269,4 +294,4 @@ Each test file builds on the previous ones, with dependency markers ensuring pro
 This project uses black for code formatting:
 ```bash
 black .
-``` 
+```

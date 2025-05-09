@@ -23,6 +23,7 @@ from src.reconcile import (
     import_csv,
     import_folder
 )
+import uuid
 
 def test_csv_import(tmp_path):
     """Test CSV import functionality"""
@@ -45,20 +46,20 @@ def test_csv_import(tmp_path):
     # Check that source_file is present
     assert 'source_file' in result.columns
 
-@pytest.mark.parametrize("format_name,file_pattern", [
-    ("discover", "discover_*.csv"),
-    ("amex", "amex_*.csv"),
-    ("capital_one", "capital_one_*.csv"),
-    ("chase", "chase_*.csv"),
-    ("alliant_checking", "alliant_checking_*.csv"),
-    ("alliant_visa", "alliant_visa_*.csv"),
-    ("empower", "empower_*.csv")
+@pytest.mark.parametrize("format_name", [
+    "discover",
+    "amex",
+    "capital_one",
+    "chase",
+    "alliant_checking",
+    "alliant_visa",
+    "aggregator"
 ])
-def test_file_format_detection(format_name, file_pattern, tmp_path, create_test_df):
-    """Test automatic file format detection"""
-    # Create test file
+def test_file_format_detection(format_name, tmp_path, create_test_df):
+    """Test automatic file format detection based on data structure"""
+    # Create test file with random name
+    file_path = tmp_path / f"test_{format_name}_{uuid.uuid4().hex[:8]}.csv"
     df = create_test_df(format_name)
-    file_path = tmp_path / f"{format_name}_test.csv"
     df.to_csv(file_path, index=False)
     
     # Read and validate
