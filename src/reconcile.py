@@ -1117,7 +1117,12 @@ def generate_reconciliation_report(matched_df, unmatched_df, output_path):
     
     # Write report to file
     output_path = pathlib.Path(output_path)
+    # If path is a directory, append the report filename
+    if output_path.is_dir() or not output_path.suffix:
+        output_path = output_path / "reconciliation_report.txt"
+    
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    logger.debug(f"Writing reconciliation report to {output_path}")
     with open(output_path, 'w') as f:
         f.write('\n'.join(report_lines))
 
