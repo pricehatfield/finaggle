@@ -263,6 +263,40 @@ class TestAlliantFormat:
         df = create_test_df('alliant_visa')
         result = process_alliant_visa_format(df)
         assert result['Amount'].iloc[0] == -123.45  # Debit amount should be negative
+        
+    @pytest.mark.dependency()
+    def test_alliant_checking_deposit_handling(self):
+        """Test Alliant Checking deposit handling.
+        
+        Verifies:
+        - Deposits (credits) in source files are preserved as positive values 
+          in the standardized output, per README specification
+        """
+        # Create test data for a deposit transaction (positive amount in source file)
+        df = pd.DataFrame({
+            'Date': ['03/17/2025'],
+            'Description': ['DEPOSIT ACH JPMORGAN CHASE TYPE: Ext Trnsfr'],
+            'Amount': ['$50.00'],  # Positive value in source = deposit/credit
+            'Balance': ['$1,000.00']
+        })
+        
+        result = process_alliant_checking_format(df)
+        
+        # Verify deposit remains positive in standardized output
+        assert result['Amount'].iloc[0] == 50.00
+        
+        # Test with negative amount in source (should be a debit/payment)
+        df = pd.DataFrame({
+            'Date': ['03/17/2025'],
+            'Description': ['PAYMENT TO SOME VENDOR'],
+            'Amount': ['-$25.00'],  # Negative value in source = payment/debit
+            'Balance': ['$975.00']
+        })
+        
+        result = process_alliant_checking_format(df)
+        
+        # Verify payment is negative in standardized output
+        assert result['Amount'].iloc[0] == -25.00
 
 @pytest.mark.dependency()
 class TestChaseFormat:

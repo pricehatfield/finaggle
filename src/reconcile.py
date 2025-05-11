@@ -519,11 +519,11 @@ def process_alliant_checking_format(df, source_file=None):
     # Copy description as-is
     result['Description'] = df['Description'].apply(standardize_description)
     
-    # Process amounts - detect sign more robustly and preserve it
-    # From real data files: positive values are credits, negative are debits
+    # Process amounts - detect sign and preserve it correctly
+    # According to README: positive values in source file are credits/deposits
     amounts = []
     for amt in df['Amount']:
-        # Robust check for negative value
+        # Robust check for negative value in source file
         is_negative = False
         if isinstance(amt, str):
             amt_str = amt.strip()
@@ -537,7 +537,10 @@ def process_alliant_checking_format(df, source_file=None):
         # Clean the amount to remove $ and commas
         cleaned_amt = clean_amount(amt)
         
-        # If original was negative, keep it negative; otherwise keep it positive
+        # For standardized format: 
+        # - Negative for debits (payments)
+        # - Positive for credits (deposits)
+        # Per README: Alliant Checking source file has positive values for deposits
         final_amt = -abs(cleaned_amt) if is_negative else abs(cleaned_amt)
         amounts.append(final_amt)
     
