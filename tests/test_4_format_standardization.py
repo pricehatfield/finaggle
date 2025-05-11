@@ -277,7 +277,7 @@ class TestChaseFormat:
         - Amount sign (negative for debits)
         - Description preservation
         - Type field is preserved separately from Category
-        - Category is derived from Type
+        - Category is set to "Uncategorized" as Chase has no category data
         """
         df = create_test_df('chase')
         result = process_chase_format(df)
@@ -288,8 +288,8 @@ class TestChaseFormat:
         assert result['Amount'].iloc[0] == -40.33
         assert 'Type' in result.columns
         assert result['Type'].iloc[0] == 'ACH_DEBIT'
-        assert 'Category' in result.columns  # Now we expect Category
-        assert result['Category'].iloc[0] == 'ACH_DEBIT'  # Category should match Type
+        assert 'Category' in result.columns
+        assert result['Category'].iloc[0] == 'Uncategorized'  # Category should be "Uncategorized" not Type
 
     @pytest.mark.dependency(depends=["TestChaseFormat::test_basic_processing"])
     def test_amount_handling(self):

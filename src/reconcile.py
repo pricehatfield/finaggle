@@ -373,8 +373,8 @@ def process_chase_format(df: pd.DataFrame, source_file=None) -> pd.DataFrame:
     # Preserve Type field as separate transaction classification
     result['Type'] = df['Type']
     
-    # Add Category field (set to Type or Uncategorized)
-    result['Category'] = df['Type'].apply(lambda x: standardize_category(x))
+    # Add Category field (set to Uncategorized as Chase has no category field)
+    result['Category'] = "Uncategorized"
     
     # Preserve Check or Slip # field if present
     if 'Check or Slip #' in df.columns:
