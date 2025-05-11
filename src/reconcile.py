@@ -214,24 +214,24 @@ def is_valid_amount(x):
 
 def standardize_description(description):
     """
-    Standardize transaction descriptions while preserving all content, including newlines.
+    Standardize transaction descriptions by stripping newlines while preserving other content.
     
     Args:
         description (str): Raw transaction description
         
     Returns:
-        str: Standardized description with original content preserved
+        str: Standardized description with newlines stripped
         
     Notes:
-        - Preserves original content exactly including newlines
+        - Strips newlines to ensure consistent matching
         - Handles null/NaN values
         - Preserves leading/trailing spaces
     """
     if pd.isna(description) or not isinstance(description, str):
         return description
         
-    # Return the description as-is, preserving all content including newlines
-    return description
+    # Strip newlines while preserving other content
+    return description.replace('\n', ' ')
 
 def process_discover_format(df, source_file=None):
     """Process Discover transactions into standardized format.

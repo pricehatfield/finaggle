@@ -441,17 +441,17 @@ class TestDescriptionStandardization:
     
     Description standardization requirements:
     - Source files preserve newlines exactly as-is
-    - Standardized format preserves newlines exactly as-is
-    - Original description content is preserved exactly
+    - Standardized format strips newlines for consistent matching
+    - Original description content except newlines is preserved exactly
     """
     
     @pytest.mark.dependency()
     def test_newline_preservation(self):
-        """Test that newlines are preserved during standardization.
+        """Test that newlines are stripped during standardization.
         
         Verifies:
         - Source descriptions with newlines are preserved exactly as-is
-        - Description content is preserved exactly
+        - Standardized descriptions have newlines replaced with spaces
         """
         # Test with Alliant Checking format which explicitly supports newlines
         df = pd.DataFrame({
@@ -467,16 +467,16 @@ class TestDescriptionStandardization:
         # Process through standardization
         result = process_alliant_checking_format(df)
         
-        # Verify newlines are preserved in standardized format
-        assert '\n' in result['Description'].iloc[0]
-        assert result['Description'].iloc[0] == 'DIVIDEND\nPAYMENT\nQ1 2025'
+        # Verify newlines are stripped in standardized format
+        assert '\n' not in result['Description'].iloc[0]
+        assert result['Description'].iloc[0] == 'DIVIDEND PAYMENT Q1 2025'
     
     @pytest.mark.dependency(depends=["TestDescriptionStandardization::test_newline_preservation"])
     def test_multiple_newlines(self):
         """Test handling of multiple consecutive newlines.
         
         Verifies:
-        - Multiple consecutive newlines are preserved exactly
+        - Multiple consecutive newlines are replaced with single spaces
         """
         df = pd.DataFrame({
             'Date': ['03/17/2025'],
@@ -486,7 +486,7 @@ class TestDescriptionStandardization:
         })
         
         result = process_alliant_checking_format(df)
-        assert result['Description'].iloc[0] == 'DIVIDEND\n\nPAYMENT\n\nQ1 2025'
+        assert result['Description'].iloc[0] == 'DIVIDEND  PAYMENT  Q1 2025'
     
     @pytest.mark.dependency(depends=["TestDescriptionStandardization::test_multiple_newlines"])
     def test_no_newlines(self):
