@@ -67,15 +67,17 @@ A Python package for reconciling financial transactions across multiple sources.
 #### Alliant Checking Format
 - **Columns**:
   - `Date`: String (MM/DD/YYYY, Python datetime format "%m/%d/%Y", represents transaction date)
-  - `Description`: String (preserved exactly as-is, may contain newlines)
-  - `Amount`: String (includes $ symbol, positive for credits, negative for debits [TBC])
+  - `Description`: String (preserved exactly as-is, may contain newlines. All observed transactions are deposits/credits.)
+  - `Amount`: String (includes $ symbol. For deposits/credits, this is a positive value, e.g., "$50.00". Format for debits/payments is TBD.)
   - `Balance`: String (includes $ symbol and commas for thousands)
 - **Notes**:
-  - Only transaction date is provided
-  - Amount sign convention: positive for credits, negative for debits [TBC]
-  - Amounts include $ symbol
-  - Balance includes $ symbol and commas
-  - Description may contain newlines (e.g., in dividend entries)
+  - Only transaction date is provided.
+  - Amount sign convention for source files:
+    - **Credits (Deposits)**: Represented as positive numbers (e.g., "$50.00").
+    - **Debits (Payments)**: Format is To Be Determined (TBD).
+  - Amounts include $ symbol.
+  - Balance includes $ symbol and commas.
+  - Description may contain newlines (e.g., in dividend entries).
 
 #### Alliant Visa Format
 - **Columns**:

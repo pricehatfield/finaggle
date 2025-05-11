@@ -129,6 +129,7 @@ coverage.xml
 # Project specific
 logs/
 archive/
+output/
 *.csv
 *.xlsx
 *.xls
