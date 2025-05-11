@@ -67,11 +67,11 @@ A Python package for reconciling financial transactions across multiple sources.
 - **Columns**:
   - `Date`: String (MM/DD/YYYY, Python datetime format "%m/%d/%Y", represents transaction date)
   - `Description`: String (preserved exactly as-is, may contain newlines)
-  - `Amount`: String (includes $ symbol, positive for credits)
+  - `Amount`: String (includes $ symbol, positive for credits, negative for debits [TBC])
   - `Balance`: String (includes $ symbol and commas for thousands)
 - **Notes**:
   - Only transaction date is provided
-  - Amount sign convention: positive for credits
+  - Amount sign convention: positive for credits, negative for debits [TBC]
   - Amounts include $ symbol
   - Balance includes $ symbol and commas
   - Description may contain newlines (e.g., in dividend entries)

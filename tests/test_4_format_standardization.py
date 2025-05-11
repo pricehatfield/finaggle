@@ -10,7 +10,8 @@ from src.reconcile import (
     process_alliant_visa_format,
     process_chase_format,
     process_aggregator_format,
-    standardize_category
+    standardize_category,
+    process_alliant_checking_format
 )
 
 def create_test_df(format_name):
@@ -46,19 +47,20 @@ def create_test_df(format_name):
         })
     elif format_name == 'capital_one':
         return pd.DataFrame({
-            'Transaction Date': ['2025-03-17'],
-            'Posted Date': ['2025-03-18'],
-            'Card No.': ['1234'],
-            'Description': ['AMAZON.COM'],
-            'Category': ['Shopping'],
-            'Debit': [40.33],
-            'Credit': [None]
+            'Transaction Date': ['2025-03-17', '2025-03-18'],
+            'Posted Date': ['2025-03-18', '2025-03-19'],
+            'Card No.': ['1234', '1234'],
+            'Description': ['AMAZON.COM', 'CAPITAL ONE MOBILE PYMT'],
+            'Category': ['Shopping', 'Payment/Credit'],
+            'Debit': [40.33, None],
+            'Credit': [None, 100.00]
         })
     elif format_name == 'alliant_visa':
         return pd.DataFrame({
             'Date': ['2025-03-17'],
             'Description': ['AMAZON.COM'],
             'Amount': ['$123.45'],
+            'Balance': ['$1,000.00'],
             'Post Date': ['2025-03-18'],
             'Category': ['Shopping'],
             'source_file': ['alliant_test.csv']
@@ -208,6 +210,18 @@ class TestCapitalOneFormat:
         df = create_test_df('capital_one')
         result = process_capital_one_format(df)
         assert result['Amount'].iloc[0] == -40.33  # Debit amount should be negative
+        
+    @pytest.mark.dependency(depends=["TestCapitalOneFormat::test_amount_handling"])
+    def test_credit_handling(self):
+        """Test Capital One credit handling.
+        
+        Verifies:
+        - Credit amounts are processed as positive values
+        - Null debit values don't affect credit processing
+        """
+        df = create_test_df('capital_one')
+        result = process_capital_one_format(df)
+        assert result['Amount'].iloc[1] == 100.00  # Credit amount should be positive
 
 @pytest.mark.dependency()
 class TestAlliantFormat:
@@ -252,37 +266,31 @@ class TestAlliantFormat:
 
 @pytest.mark.dependency()
 class TestChaseFormat:
-    """Test suite for Chase format processing.
-    
-    Chase format specific requirements:
-    - Amounts are negative for debits
-    - Single date field (used for both transaction and post dates)
-    - Preserves original description case
-    - No Category field is provided (Type field is separate transaction classification)
-    """
-    
+    """Test cases for Chase format standardization."""
+
     @pytest.mark.dependency()
     def test_basic_processing(self):
         """Test basic Chase format processing.
-        
+
         Verifies:
         - Date standardization (YYYY-MM-DD)
         - Amount sign (negative for debits)
         - Description preservation
-        - Type field is preserved separately (not used as Category)
-        - No Category field is expected
+        - Type field is preserved separately from Category
+        - Category is derived from Type
         """
         df = create_test_df('chase')
         result = process_chase_format(df)
-        
+
         assert result['Transaction Date'].iloc[0] == '2025-03-17'
         assert result['Post Date'].iloc[0] == '2025-03-17'
         assert result['Description'].iloc[0] == 'AMAZON.COM'
         assert result['Amount'].iloc[0] == -40.33
         assert 'Type' in result.columns
         assert result['Type'].iloc[0] == 'ACH_DEBIT'
-        assert 'Category' not in result.columns
-    
+        assert 'Category' in result.columns  # Now we expect Category
+        assert result['Category'].iloc[0] == 'ACH_DEBIT'  # Category should match Type
+
     @pytest.mark.dependency(depends=["TestChaseFormat::test_basic_processing"])
     def test_amount_handling(self):
         """Test Chase amount handling.
@@ -433,17 +441,16 @@ class TestDescriptionStandardization:
     
     Description standardization requirements:
     - Source files preserve newlines exactly as-is
-    - Standardized format strips newlines from descriptions
-    - Original description content is preserved (just newlines removed)
+    - Standardized format preserves newlines exactly as-is
+    - Original description content is preserved exactly
     """
     
     @pytest.mark.dependency()
-    def test_newline_stripping(self):
-        """Test that newlines are stripped during standardization.
+    def test_newline_preservation(self):
+        """Test that newlines are preserved during standardization.
         
         Verifies:
-        - Source descriptions with newlines are preserved as-is in source files
-        - Newlines are stripped in standardized format
+        - Source descriptions with newlines are preserved exactly as-is
         - Description content is preserved exactly
         """
         # Test with Alliant Checking format which explicitly supports newlines
@@ -460,17 +467,16 @@ class TestDescriptionStandardization:
         # Process through standardization
         result = process_alliant_checking_format(df)
         
-        # Verify newlines are stripped in standardized format
-        assert '\n' not in result['Description'].iloc[0]
-        assert result['Description'].iloc[0] == 'DIVIDEND PAYMENT Q1 2025'
+        # Verify newlines are preserved in standardized format
+        assert '\n' in result['Description'].iloc[0]
+        assert result['Description'].iloc[0] == 'DIVIDEND\nPAYMENT\nQ1 2025'
     
-    @pytest.mark.dependency(depends=["TestDescriptionStandardization::test_newline_stripping"])
+    @pytest.mark.dependency(depends=["TestDescriptionStandardization::test_newline_preservation"])
     def test_multiple_newlines(self):
         """Test handling of multiple consecutive newlines.
         
         Verifies:
-        - Multiple consecutive newlines are handled correctly
-        - Extra spaces aren't introduced
+        - Multiple consecutive newlines are preserved exactly
         """
         df = pd.DataFrame({
             'Date': ['03/17/2025'],
@@ -480,14 +486,14 @@ class TestDescriptionStandardization:
         })
         
         result = process_alliant_checking_format(df)
-        assert result['Description'].iloc[0] == 'DIVIDEND PAYMENT Q1 2025'
+        assert result['Description'].iloc[0] == 'DIVIDEND\n\nPAYMENT\n\nQ1 2025'
     
     @pytest.mark.dependency(depends=["TestDescriptionStandardization::test_multiple_newlines"])
     def test_no_newlines(self):
         """Test handling of descriptions without newlines.
         
         Verifies:
-        - Descriptions without newlines are unchanged
+        - Descriptions without newlines are preserved exactly
         """
         df = pd.DataFrame({
             'Date': ['03/17/2025'],

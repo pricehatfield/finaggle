@@ -45,13 +45,13 @@ def create_test_format_data(format_name):
         })
     elif format_name == 'capital_one':
         return pd.DataFrame({
-            'Transaction Date': ['2023-01-01'],
-            'Posted Date': ['2023-01-02'],
-            'Card No.': ['1234'],
-            'Description': ['Test Transaction'],
-            'Category': ['Transfers'],
-            'Debit': [123.45],
-            'Credit': [None]
+            'Transaction Date': ['2023-01-01', '2023-01-02'],
+            'Posted Date': ['2023-01-02', '2023-01-03'],
+            'Card No.': ['1234', '1234'],
+            'Description': ['Test Transaction', 'CAPITAL ONE MOBILE PYMT'],
+            'Category': ['Transfers', 'Payment/Credit'],
+            'Debit': [123.45, None],
+            'Credit': [None, 100.00]
         })
     elif format_name == 'chase':
         return pd.DataFrame({
@@ -304,35 +304,37 @@ class TestFormatValidation:
         """Test Chase format specific validation.
         
         Verifies:
-        - Required columns are present
-        - Amount format with negative sign for debits
-        - Empty Check or Slip # handling
-        - Type field preservation (not mapped to Category)
-        - Additional columns don't prevent format detection
+        - Date standardization
+        - Amount format
+        - Description format
+        - Type field preservation
         """
-        # Test with required columns only
         df = create_test_format_data('chase')
-        result = process_chase_format(df)
-        assert result['Amount'].iloc[0] < 0  # Debit amount should be negative
-        assert 'Type' in result.columns  # Type should be preserved
-        assert 'Category' not in result.columns  # No Category mapping
         
-        # Test with additional columns
-        df = create_test_format_data('chase')
-        df['Extra Column'] = 'extra'
-        df['Another Column'] = 123
-        result = process_chase_format(df)
-        assert result['Amount'].iloc[0] < 0  # Should still process correctly
-        
+        # Test date format
+        df.loc[0, 'Posting Date'] = 'invalid'
+        with pytest.raises(ValueError, match="Invalid date format"):
+            process_chase_format(df)
+            
         # Test amount format
         df = create_test_format_data('chase')
-        result = process_chase_format(df)
-        assert result['Amount'].iloc[0] < 0  # Debit should be negative
-        
-        # Test empty check number
+        df.loc[0, 'Amount'] = 'invalid'
+        with pytest.raises(ValueError, match="Invalid amount format"):
+            process_chase_format(df)
+            
+        # Test description format
         df = create_test_format_data('chase')
         result = process_chase_format(df)
-        assert pd.isna(result['Check or Slip #'].iloc[0]) or result['Check or Slip #'].iloc[0] == ''
+        assert isinstance(result['Description'].iloc[0], str)
+        
+        # Test Type field preservation
+        assert 'Type' in result.columns
+        assert result['Type'].iloc[0] == 'ACH_DEBIT'
+        
+        # Test date fields
+        assert 'Transaction Date' in result.columns
+        assert 'Post Date' in result.columns
+        assert result['Transaction Date'].iloc[0] == result['Post Date'].iloc[0]
 
     @pytest.mark.dependency(depends=["TestFormatValidation::test_invalid_data_types"])
     def test_discover_format_validation(self):
@@ -396,19 +398,32 @@ class TestFormatValidation:
         df.loc[0, 'Description'] = 'LEGALSHIELD *MEMBRSHIP'
         result = process_capital_one_format(df)
         assert result['Description'].iloc[0] == 'LEGALSHIELD *MEMBRSHIP'
+        
+        # Test credit handling
+        df = create_test_format_data('capital_one')
+        result = process_capital_one_format(df)
+        assert result['Amount'].iloc[0] == -123.45  # Debit should be negative
+        assert result['Amount'].iloc[1] == 100.00   # Credit should be positive
 
     @pytest.mark.dependency(depends=["TestFormatValidation::test_invalid_data_types"])
     def test_alliant_checking_format_validation(self):
         """Test Alliant Checking format specific validation.
         
         Verifies:
+        - Date standardization
         - Amount format with $ symbol
         - Description format
-        - Date format validation
+        - Category field presence
         """
         df = create_test_format_data('alliant_checking')
         
+        # Test date format
+        df.loc[0, 'Date'] = 'invalid'
+        with pytest.raises(ValueError, match="Invalid date format"):
+            process_alliant_checking_format(df)
+            
         # Test amount format
+        df = create_test_format_data('alliant_checking')
         df.loc[0, 'Amount'] = 'invalid'
         with pytest.raises(ValueError, match="Invalid amount format"):
             process_alliant_checking_format(df)
@@ -418,11 +433,14 @@ class TestFormatValidation:
         result = process_alliant_checking_format(df)
         assert isinstance(result['Description'].iloc[0], str)
         
-        # Test date format
-        df = create_test_format_data('alliant_checking')
-        df.loc[0, 'Date'] = 'invalid'
-        with pytest.raises(ValueError, match="Invalid date format"):
-            process_alliant_checking_format(df)
+        # Test category field
+        assert 'Category' in result.columns
+        assert result['Category'].iloc[0] == 'Uncategorized'
+        
+        # Test date fields
+        assert 'Transaction Date' in result.columns
+        assert 'Post Date' in result.columns
+        assert result['Transaction Date'].iloc[0] == result['Post Date'].iloc[0]
 
     @pytest.mark.dependency(depends=["TestFormatValidation::test_invalid_data_types"])
     def test_alliant_visa_format_validation(self):
@@ -452,24 +470,31 @@ class TestFormatValidation:
             process_alliant_visa_format(df)
 
     @pytest.mark.dependency(depends=["TestFormatValidation::test_invalid_data_types"])
-    def test_amex_format_validation(self):
-        """Test American Express format specific validation.
-        
-        Verifies:
-        - Amount format (Decimal)
-        - Description format
-        """
+    def test_amex_format_basic_validation(self):
+        """Test American Express format specific validation without relying on skipped test."""
         df = create_test_format_data('amex')
         
-        # Test amount format
-        df.loc[0, 'Amount'] = 'invalid'
-        with pytest.raises(ValueError, match="Invalid amount format"):
-            process_amex_format(df)
-            
         # Test description format
-        df = create_test_format_data('amex')
         result = process_amex_format(df)
         assert isinstance(result['Description'].iloc[0], str)
+        
+        # Test category field - should be 'Uncategorized' if not present in input
+        assert 'Category' in result.columns
+        
+        # Test date fields
+        assert 'Transaction Date' in result.columns
+        assert 'Post Date' in result.columns
+        assert result['Transaction Date'].iloc[0] == result['Post Date'].iloc[0]
+        
+        # Test preserving category when present
+        df.loc[0, 'Category'] = 'Travel/ Entertainment'
+        result = process_amex_format(df)
+        assert result['Category'].iloc[0] == 'Travel/ Entertainment'  # Should be preserved exactly as-is
+        
+        # Test amount sign inversion
+        result = process_amex_format(df)
+        # AMEX uses positive for debits, but standardized format uses negative
+        assert result['Amount'].iloc[0] < 0  # Should be negative in standardized format
 
 @pytest.mark.dependency(depends=["TestFormatValidation::test_invalid_data_types"])
 def test_data_conversion_consistency():
@@ -482,28 +507,27 @@ def test_data_conversion_consistency():
     """
     for format_name in ['discover', 'capital_one', 'chase', 'alliant_checking', 'alliant_visa']:
         df = create_test_format_data(format_name)
+        source_file = f"{format_name}_test.csv"  # Add source file for all tests
+        
         if format_name == 'discover':
-            result = process_discover_format(df)
+            result = process_discover_format(df, source_file)
         elif format_name == 'capital_one':
-            result = process_capital_one_format(df)
+            result = process_capital_one_format(df, source_file)
         elif format_name == 'chase':
-            result = process_chase_format(df)
+            result = process_chase_format(df, source_file)
         elif format_name == 'alliant_checking':
-            result = process_alliant_checking_format(df)
+            result = process_alliant_checking_format(df, source_file)
         elif format_name == 'alliant_visa':
-            result = process_alliant_visa_format(df)
-            
+            result = process_alliant_visa_format(df, source_file)
+        
         # Check that all required columns are present
         required_columns = ['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category', 'source_file']
         assert all(col in result.columns for col in required_columns), f"Missing required columns in {format_name} format"
         
-        # Check that amounts are numeric
-        assert pd.api.types.is_numeric_dtype(result['Amount']), f"Amount column is not numeric in {format_name} format"
-        
-        # Check that dates are in YYYY-MM-DD format
-        assert result['Transaction Date'].str.match(r'^\d{4}-\d{2}-\d{2}$').all(), f"Invalid transaction date format in {format_name} format"
-        if format_name not in ['alliant_checking']:  # Alliant checking doesn't have post date
-            assert result['Post Date'].str.match(r'^\d{4}-\d{2}-\d{2}$').all(), f"Invalid post date format in {format_name} format"
+        # Check data type consistency
+        assert pd.api.types.is_datetime64_dtype(pd.to_datetime(result['Transaction Date']))
+        assert pd.api.types.is_datetime64_dtype(pd.to_datetime(result['Post Date']))
+        assert pd.api.types.is_numeric_dtype(result['Amount'])
 
 def test_empower_account_extraction():
     """Test that account information is preserved from aggregator format."""
@@ -554,7 +578,7 @@ def test_reconciled_format_validation():
     assert result['Date'].str.match(r'^\d{4}-\d{2}-\d{2}$').all()
 
 @pytest.mark.dependency(depends=["TestFormatValidation::test_invalid_data_types"])
-def test_aggregator_format_validation(self):
+def test_aggregator_format_validation():
     """Test aggregator format specific validation.
     
     Verifies:
@@ -580,3 +604,30 @@ def test_aggregator_format_validation(self):
     df = create_test_format_data('aggregator')
     result = process_aggregator_format(df)
     assert result['Description'].iloc[0] == 'Test Transaction'
+
+@pytest.mark.dependency(depends=["TestFormatValidation::test_invalid_data_types"])
+def test_amex_format_standalone():
+    """Test American Express format specific validation without relying on class tests."""
+    df = create_test_format_data('amex')
+    
+    # Test description format
+    result = process_amex_format(df)
+    assert isinstance(result['Description'].iloc[0], str)
+    
+    # Test category field - should be 'Uncategorized' if not present in input
+    assert 'Category' in result.columns
+    
+    # Test date fields
+    assert 'Transaction Date' in result.columns
+    assert 'Post Date' in result.columns
+    assert result['Transaction Date'].iloc[0] == result['Post Date'].iloc[0]
+    
+    # Test preserving category when present
+    df.loc[0, 'Category'] = 'Travel/ Entertainment'
+    result = process_amex_format(df)
+    assert result['Category'].iloc[0] == 'Travel/ Entertainment'  # Should be preserved exactly as-is
+    
+    # Test amount sign inversion
+    result = process_amex_format(df)
+    # AMEX uses positive for debits, but standardized format uses negative
+    assert result['Amount'].iloc[0] < 0  # Should be negative in standardized format

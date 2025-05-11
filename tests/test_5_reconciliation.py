@@ -184,9 +184,9 @@ def test_import_folder(tmp_path):
     assert all(isinstance(df, pd.DataFrame) for df in result)
     assert all(not df.empty for df in result)
     
-    # Verify source files
+    # Verify source files - expect with .csv extension
     source_files = {df['source_file'].iloc[0] for df in result}
-    assert source_files == {'test1', 'test2'}
+    assert source_files == {'test1.csv', 'test2.csv'}
 
 class TestReconciliation:
     """Test suite for transaction reconciliation"""

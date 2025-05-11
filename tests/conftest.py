@@ -25,8 +25,8 @@ capital_one_sample_data = {
     'Card No.': ['1234'],
     'Description': ['Test Transaction'],
     'Category': ['Shopping'],
-    'Debit': ['50.00'],  # Positive for debits
-    'Credit': ['']  # Empty for debit transactions
+    'Debit': [50.00],  # Decimal format for debits
+    'Credit': [None]  # None for debit transactions
 }
 
 chase_sample_data = {
@@ -41,10 +41,9 @@ chase_sample_data = {
 
 alliant_checking_sample_data = {
     'Date': ['01/01/2025'],
-    'Description': ['Test Transaction'],
-    'Amount': ['-50.00'],  # Negative for debits
-    'Balance': ['1000.00'],
-    'Category': ['Shopping']
+    'Description': ['Sample Transaction'],
+    'Amount': ['-50.00'],  # Ensure this is negative for debits per test requirements
+    'Balance': ['$1,000.00']
 }
 
 alliant_visa_sample_data = {
@@ -54,6 +53,15 @@ alliant_visa_sample_data = {
     'Balance': ['1000.00'],
     'Post Date': ['01/02/2025'],
     'Category': ['Shopping']
+}
+
+aggregator_sample_data = {
+    'Date': ['2025-03-17'],
+    'Account': ['Discover Card - Ending in 1234'],
+    'Description': ['AMAZON.COM'],
+    'Category': ['Shopping'],
+    'Tags': ['Online'],
+    'Amount': ['-123.45']  # Negative for debits
 }
 
 empower_sample_data = {
@@ -78,7 +86,8 @@ def create_test_df():
             'alliant_checking': alliant_checking_sample_data,
             'alliant_visa': alliant_visa_sample_data,
             'amex': amex_sample_data,
-            'empower': empower_sample_data
+            'empower': empower_sample_data,
+            'aggregator': aggregator_sample_data
         }
         if format_name not in sample_data:
             raise ValueError(f"Unknown format: {format_name}")
@@ -161,7 +170,7 @@ def sample_transactions_df():
             'U:2025-01-13_150.50',
             'U:2025-01-15_100.25'
         ],
-        'Matched': [True] * 5 + [False] * 3
+        'Matched': ['"True"'] * 5 + ['"False"'] * 3
     })
 
 @pytest.fixture

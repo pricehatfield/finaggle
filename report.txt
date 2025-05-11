@@ -1,0 +1,10 @@
+Total Transactions: 0
+Matched Transactions: 0
+Unmatched Transactions: 0
+Total Amount: $0.00
+Matched Amount: $0.00
+Unmatched Amount: $0.00
+
+No matched transactions found
+
+No unmatched transactions found

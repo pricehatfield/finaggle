@@ -212,9 +212,18 @@ def test_setup_logging(tmp_path, monkeypatch):
     log_file = tmp_path / 'test.log'
     monkeypatch.setenv('LOG_FILE', str(log_file))
     
+    # Reset logging configuration
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+    
     # Import after setting environment variable
     from src.utils import setup_logging
-    setup_logging()
     
+    # Call setup_logging with explicit log_level='info'
+    setup_logging(log_level='info')
+    
+    # Check that the log file was created
     assert log_file.exists()
+    
+    # Check that the log level was set correctly
     assert logging.getLogger().level == logging.INFO 
