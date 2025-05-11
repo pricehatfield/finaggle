@@ -481,7 +481,7 @@ def process_aggregator_format(df: pd.DataFrame, source_file=None) -> pd.DataFram
     if 'Category' in df.columns:
         result['Category'] = df['Category']
     
-    # Preserve Tags if present
+    # Preserve Tags if present (this was the actual fix, ensure it remains)
     if 'Tags' in df.columns:
         result['Tags'] = df['Tags']
     
@@ -764,10 +764,10 @@ def identify_format(df):
         'discover': ['Trans. Date', 'Post Date', 'Description', 'Amount', 'Category'],
         'capital_one': ['Transaction Date', 'Posted Date', 'Description', 'Debit', 'Credit'],
         'chase': ['Posting Date', 'Description', 'Amount', 'Type', 'Balance'],
+        'aggregator': ['Date', 'Account', 'Description', 'Amount'],
         'amex': ['Date', 'Description', 'Amount'],
         'alliant_checking': ['Date', 'Description', 'Amount', 'Balance'],
         'alliant_visa': ['Date', 'Description', 'Amount', 'Balance', 'Post Date'],
-        'aggregator': ['Date', 'Account', 'Description', 'Amount'],
         'test': ['Transaction Date', 'Post Date', 'Description', 'Amount', 'Category']
     }
     
@@ -862,14 +862,6 @@ def import_csv(file_path):
         
         if df is None:
             raise ValueError("Could not read CSV file with any supported encoding")
-        
-        logger.debug("===================================")
-        logger.debug(f"File: {file_path}")
-        logger.debug(f"Shape: {df.shape}")
-        logger.debug(f"Columns: {list(df.columns)}")
-        logger.debug(f"Columns (repr): {[repr(col) for col in df.columns]}")
-        logger.debug(f"First row: {df.iloc[0].to_dict()}")
-        logger.debug("===================================")
         
         # Get source file name (preserved exactly as-is)
         source_file = os.path.basename(file_path)
