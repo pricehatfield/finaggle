@@ -170,7 +170,7 @@ def sample_transactions_df():
             'U:2025-01-13_150.50',
             'U:2025-01-15_100.25'
         ],
-        'Matched': ['"True"'] * 5 + ['"False"'] * 3
+        'Matched': ["True"] * 5 + ["False"] * 3
     })
 
 @pytest.fixture

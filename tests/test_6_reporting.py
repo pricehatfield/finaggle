@@ -243,13 +243,13 @@ class TestReporting:
         assert os.path.exists(all_transactions_path)
         
         # Read and verify contents
-        df = pd.read_csv(all_transactions_path)
+        df = pd.read_csv(all_transactions_path, dtype={'Matched': str})
         assert 'Matched' in df.columns
         assert len(df) == len(matches) + len(unmatched)
         
-        # Check for quoted string values
-        assert (df['Matched'] == '"True"').sum() == len(matches)  # Count of "True" values should equal matches length
-        assert (df['Matched'] == '"False"').sum() == len(unmatched)  # Count of "False" values should equal unmatched length
+        # Check total length and match counts
+        assert (df['Matched'] == 'True').sum() == len(matches)  # Count of "True" values should equal matches length
+        assert (df['Matched'] == 'False').sum() == len(unmatched)  # Count of "False" values should equal unmatched length
 
     def test_report_summary(self):
         """Test report summary formatting"""
@@ -347,8 +347,8 @@ def test_output_format_validation(sample_transactions_df):
         "Amount column should be numeric"
 
     # Test Matched format
-    assert sample_transactions_df['Matched'].isin(['"True"', '"False"']).all(), \
-        "Matched should be either '\"True\"' or '\"False\"'"
+    assert sample_transactions_df['Matched'].astype(str).isin(["True", "False"]).all(), \
+        "Matched should be either 'True' or 'False'"
 
     # Test reconciled_key format
     assert sample_transactions_df['reconciled_key'].str.match(r'^[PTU]:\d{4}-\d{2}-\d{2}_\d+\.\d{2}$').all(), \
@@ -407,20 +407,20 @@ def test_save_reconciliation_results(sample_matched_df, sample_unmatched_df, tmp
     assert os.path.exists(all_transactions_path)
     
     # Read and verify contents
-    df = pd.read_csv(all_transactions_path)
+    df = pd.read_csv(all_transactions_path, dtype={'Matched': str})
     print(f"Matched column contents: {df['Matched'].tolist()}")
-    print(f"Count of \"True\" values: {(df['Matched'] == '"True"').sum()}")
-    print(f"Count of \"False\" values: {(df['Matched'] == '"False"').sum()}")
+    print(f"Count of \"True\" values: {(df['Matched'] == 'True').sum()}")
+    print(f"Count of \"False\" values: {(df['Matched'] == 'False').sum()}")
     print(f"Expected matched length: {len(sample_matched_df)}")
     
     assert 'Matched' in df.columns
     assert len(df) == len(sample_matched_df) + len(sample_unmatched_df)
-    assert (df['Matched'] == '"True"').sum() == len(sample_matched_df)  # Count of "True" values should equal matches length
-    assert (df['Matched'] == '"False"').sum() == len(sample_unmatched_df)  # Count of "False" values should equal unmatched length
+    assert (df['Matched'] == 'True').sum() == len(sample_matched_df)  # Count of "True" values should equal matches length
+    assert (df['Matched'] == 'False').sum() == len(sample_unmatched_df)  # Count of "False" values should equal unmatched length
     
     # Verify data integrity
-    matched_rows = df[df['Matched'] == '"True"']
-    unmatched_rows = df[df['Matched'] == '"False"']
+    matched_rows = df[df['Matched'] == 'True']
+    unmatched_rows = df[df['Matched'] == 'False']
     
     # Check matched transactions
     assert all(matched_rows['Description'].isin(sample_matched_df['Description']))
@@ -474,17 +474,17 @@ def test_reconciled_output_format(tmp_path):
         assert set(excel.sheet_names) == {'All Transactions'}
         
         # Read and verify contents
-        df = pd.read_excel(excel_path, sheet_name='All Transactions')
+        df = pd.read_excel(excel_path, sheet_name='All Transactions', dtype={'Matched': str})
         assert 'Matched' in df.columns
         assert len(df) == len(matched_df) + len(unmatched_df)
         
         # Check that we have the correct number of matched and unmatched rows
-        assert (df['Matched'] == '"True"').sum() == len(matched_df)
-        assert (df['Matched'] == '"False"').sum() == len(unmatched_df)
+        assert (df['Matched'] == 'True').sum() == len(matched_df)
+        assert (df['Matched'] == 'False').sum() == len(unmatched_df)
         
         # Verify data integrity
-        matched_rows = df[df['Matched'] == '"True"']
-        unmatched_rows = df[df['Matched'] == '"False"']
+        matched_rows = df[df['Matched'] == 'True']
+        unmatched_rows = df[df['Matched'] == 'False']
         
         # Check matched transactions
         assert all(matched_rows['Description'].isin(matched_df['Description']))

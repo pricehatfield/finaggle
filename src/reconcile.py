@@ -980,15 +980,15 @@ def save_reconciliation_results(matched_df, unmatched_df, output_path):
     if not matched_copy.empty:
         if 'Transaction Date' in matched_copy.columns and 'Date' not in matched_copy.columns:
             matched_copy = matched_copy.rename(columns={'Transaction Date': 'Date'})
-        # Use "True" in quotes to prevent automatic conversion to boolean
-        matched_copy['Matched'] = '"True"'
+        # Use string "True" (not boolean) to maintain consistent data types
+        matched_copy['Matched'] = "True"
     
     # Process unmatched transactions
     if not unmatched_copy.empty:
         if 'Transaction Date' in unmatched_copy.columns and 'Date' not in unmatched_copy.columns:
             unmatched_copy = unmatched_copy.rename(columns={'Transaction Date': 'Date'})
-        # Use "False" in quotes to prevent automatic conversion to boolean
-        unmatched_copy['Matched'] = '"False"'
+        # Use string "False" (not boolean) to maintain consistent data types
+        unmatched_copy['Matched'] = "False"
     
     # Combine dataframes
     result = pd.concat([matched_copy, unmatched_copy], ignore_index=True)
@@ -1013,8 +1013,8 @@ def save_reconciliation_results(matched_df, unmatched_df, output_path):
         with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
             result.to_excel(writer, sheet_name='All Transactions', index=False)
     else:
-        # Write to CSV without quoting the values that are already quoted
-        result.to_csv(output_path, index=False, quoting=csv.QUOTE_MINIMAL)
+        # Write to CSV with proper quote encapsulation for all fields
+        result.to_csv(output_path, index=False, quoting=csv.QUOTE_NONNUMERIC)
 
 def format_report_summary(matched_df, unmatched_df):
     """Format a summary of reconciliation results.

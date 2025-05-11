@@ -13,6 +13,7 @@ A Python package for reconciling financial transactions across multiple sources.
 - **CSV files in `data/` may use mixed quoting**: Not all fields are necessarily quoted, and quoting is typically only used for fields containing commas or special characters (e.g., Description fields).
 - **Import logic**: Always use pandas' default quoting behavior when reading CSVs, unless the file is known to be fully quoted. Forcing `quoting=csv.QUOTE_ALL` can cause column misalignment and data errors.
 - **If you encounter import errors**: First check the data file for quoting style, then update the import logic or README as needed to match real-world data.
+- **Output files**: All fields in output CSV files should be properly quote-encapsulated (using `csv.QUOTE_NONNUMERIC` or equivalent) to ensure consistent parsing across different tools and systems.
 
 ### Source Detail Formats
 
@@ -129,12 +130,11 @@ Notes:
   - `Tags`: String (optional, comma-separated values, may contain spaces, may be empty)
   - `Amount`: Decimal (negative for debits, positive for credits)
   - `reconciled_key`: String (see Reconciliation Key Format section)
-  - `Matched`: String (strictly "True" or "False", preserved as text for human readability)
+  - `Matched`: String (strictly "True" or "False", for human readability)
 - **Notes**:
   - Tags can contain multiple values (e.g., "Joint,Price")
   - Tags field may be empty
   - Amounts are in decimal format
-  - Matched field is preserved as text for human readability
   - Account field includes card type and last 4 digits
 
 ### Output Format
@@ -150,7 +150,7 @@ The reconciliation process generates a single output file in the `output` direct
   - `Tags`: String (from aggregator file; empty for unmatched detail records)
   - `Amount`: Decimal (negative for debits; for matched transactions, from aggregator; otherwise from source record)
   - `reconciled_key`: String (see Reconciliation Key Format section)
-  - `Matched`: String (strictly "True" or "False", preserved as text for human readability)
+  - `Matched`: String (strictly "True" or "False", for human readability)
 
 #### Field Sourcing for Matched Transactions
 For transactions that are successfully matched between aggregator and detail records:
