@@ -1,6 +1,6 @@
-Total Transactions: 379
-Matched Transactions: 279
-Unmatched Transactions: 100
-Total Amount: $2244.08
-Matched Amount: $59.70
-Unmatched Amount: $2184.38
+Total Transactions: 588
+Matched Transactions: 325
+Unmatched Transactions: 263
+Total Amount: $36097.46
+Matched Amount: $13678.66
+Unmatched Amount: $22418.80
